@@ -105,9 +105,15 @@ sechs Zeilen und kein Code.
 | `script` | eigenes Skript in `scripts\` | `file` |
 
 Für alles, was sich nicht deklarieren lässt, gibt es `provider: script`. Vorlage:
-[`scripts\_template.ps1`](scripts/_template.ps1). Fragen gehören dabei immer in
-`config.yaml`, nicht ins Skript — nur so kann uwh sie vorab sammeln und in
-Profilen speichern.
+[`scripts\_template.ps1`](scripts/_template.ps1). Zwei Regeln:
+
+- **Fragen gehören in `config.yaml`, nicht ins Skript.** Nur so kann uwh sie vorab
+  sammeln und in Profilen speichern. Die Antworten kommen als
+  Umgebungsvariablen an.
+- **Das Skript läuft in einem eigenen Prozess.** Es kann uwh weder durcheinander-
+  bringen noch dessen Funktionen ersetzen. Umgekehrt teilt es sich nichts mit uwh
+  außer den Umgebungsvariablen. Rückgabe `0` = erledigt, `3010` = erledigt, aber
+  Windows muss neu starten, alles andere = Fehler.
 
 Danach prüfen — **beides**, der zweite Schritt ist der wichtige:
 
@@ -186,7 +192,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests
+tests\               Tests (4 Dateien, 54 Prüfungen)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
@@ -202,6 +208,10 @@ powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
 ```
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
+```
+
+```powershell
 powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
 ```
 
@@ -209,9 +219,12 @@ powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
 |---|---|---|
 | `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
 | `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung | nichts |
+| `fortsetzen.tests.ps1` | eigene Skripte, Neustart-Entscheidung, Fortsetzen | nichts |
 | `kennungen.tests.ps1` | ob es jedes Paket wirklich gibt | winget, Internet; Windows-Einträge zusätzlich Administratorrechte |
 
-Die ersten beiden installieren nichts und ändern nichts am System.
+Die ersten drei installieren nichts, ändern nichts am System und starten nichts
+neu — der Neustart wird durch eine Attrappe ersetzt, alles davor und danach
+läuft echt.
 
 ## Lizenz
 

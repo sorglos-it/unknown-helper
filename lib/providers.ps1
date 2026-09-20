@@ -355,6 +355,9 @@ function Invoke-UwhScript {
         return New-UwhResult 'fehler' "Skript nicht gefunden: $($Entry.File)"
     }
 
+    # Eigene Skripte laufen in einem eigenen Prozess. Sonst koennte ein fremdes
+    # Skript uwh-Funktionen ueberschreiben oder die Sitzung durcheinanderbringen.
+    # Antworten werden ueber die Umgebung vererbt.
     $saved = @{}
     try {
         foreach ($k in $Answers.Keys) {
@@ -362,14 +365,20 @@ function Invoke-UwhScript {
             [Environment]::SetEnvironmentVariable($k, [string]$Answers[$k], 'Process')
         }
 
-        $global:LASTEXITCODE = 0
-        & $path -Action $Action
-        $code = $LASTEXITCODE
-        if ($null -eq $code) { $code = 0 }
+        $r = Invoke-UwhExe (Get-UwhPowerShellExe) @(
+            '-NoProfile', '-ExecutionPolicy', 'Bypass',
+            '-File', (Resolve-UwhUncPath $path),
+            '-Action', $Action
+        )
 
-        if ($code -eq 0) { return New-UwhResult 'ok' '' }
-        if ($code -eq 3010) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
-        return New-UwhResult 'fehler' ("Skript meldet Code {0}" -f $code)
+        # Das Skript laeuft in einem eigenen Fenster-losen Prozess - was es
+        # gesagt hat, gehoert trotzdem auf den Bildschirm.
+        Show-UwhSkriptAusgabe $r.Output
+
+        if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
+        if ($r.Code -eq 3010) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+
+        return New-UwhResult 'fehler' (Get-UwhSkriptFehler $r)
     } catch {
         return New-UwhResult 'fehler' $_.Exception.Message
     } finally {
@@ -377,4 +386,24 @@ function Invoke-UwhScript {
             [Environment]::SetEnvironmentVariable($k, $saved[$k], 'Process')
         }
     }
+}
+
+function Show-UwhSkriptAusgabe {
+    param([string]$Output)
+    if (-not $Output) { return }
+    foreach ($z in ($Output -split "`r?`n")) {
+        $t = $z.TrimEnd()
+        if ($t) { Write-Host $t -ForegroundColor DarkGray }
+    }
+}
+
+# Letzte aussagekraeftige Zeile des Skripts mitnehmen, nicht nur die Zahl.
+function Get-UwhSkriptFehler {
+    param($Run)
+    $zeilen = @($Run.Output -split "`r?`n" | ForEach-Object { $_.Trim() } |
+                Where-Object { $_ -and $_ -notmatch '^(At |\+|    \+|In Zeile)' })
+    $letzte = if ($zeilen.Count -gt 0) { $zeilen[0] } else { '' }
+    if ($letzte.Length -gt 90) { $letzte = $letzte.Substring(0, 89) + '.' }
+    if ($letzte) { return ("{0} (Code {1})" -f $letzte, $Run.Code) }
+    return ("Skript meldet Code {0}" -f $Run.Code)
 }

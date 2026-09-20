@@ -25,6 +25,10 @@
       - Alles andere  = Fehler
       - Keine eigenen Abfragen einbauen. Fragen gehoeren in config.yaml,
         damit uwh sie vorab sammeln und in Profilen speichern kann.
+      - Das Skript laeuft in einem eigenen Prozess. Es teilt sich mit uwh
+        nichts ausser den Umgebungsvariablen - und kann uwh deshalb auch
+        nicht durcheinanderbringen.
+      - Write-Host-Ausgaben erscheinen nach dem Lauf, nicht waehrenddessen.
 #>
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$Action)
