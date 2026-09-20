@@ -33,6 +33,12 @@ function Invoke-UwhExe {
     param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string[]]$Arguments)
 
     Write-UwhLog 'CMD' ("{0} {1}" -f $Exe, ($Arguments -join ' '))
+
+    # Fremdprogramme schreiben Warnungen nach stderr. Steht der Aufrufer auf
+    # 'Stop', wuerde daraus eine Ausnahme statt eines auswertbaren Ergebnisses.
+    # Die Zuweisung gilt nur in dieser Funktion.
+    $ErrorActionPreference = 'Continue'
+
     $output = & $Exe @Arguments 2>&1
     $code = $LASTEXITCODE
     if ($null -eq $code) { $code = 0 }
@@ -371,13 +377,15 @@ function Invoke-UwhScript {
             '-Action', $Action
         )
 
-        # Das Skript laeuft in einem eigenen Fenster-losen Prozess - was es
-        # gesagt hat, gehoert trotzdem auf den Bildschirm.
-        Show-UwhSkriptAusgabe $r.Output
+        if ($r.Code -eq 0 -or $r.Code -eq 3010) {
+            # Gelungen: zeigen, was das Skript gesagt hat.
+            Show-UwhSkriptAusgabe $r.Output
+            if ($r.Code -eq 3010) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+            return New-UwhResult 'ok' ''
+        }
 
-        if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
-        if ($r.Code -eq 3010) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
-
+        # Schiefgegangen: nur die eine Zeile, die zaehlt. Die Fehlerlawine
+        # von PowerShell steht im Protokoll, nicht auf dem Bildschirm.
         return New-UwhResult 'fehler' (Get-UwhSkriptFehler $r)
     } catch {
         return New-UwhResult 'fehler' $_.Exception.Message
@@ -397,13 +405,24 @@ function Show-UwhSkriptAusgabe {
     }
 }
 
-# Letzte aussagekraeftige Zeile des Skripts mitnehmen, nicht nur die Zahl.
+# Aus der Fehlerlawine von PowerShell die eine verstaendliche Zeile holen.
 function Get-UwhSkriptFehler {
     param($Run)
-    $zeilen = @($Run.Output -split "`r?`n" | ForEach-Object { $_.Trim() } |
-                Where-Object { $_ -and $_ -notmatch '^(At |\+|    \+|In Zeile)' })
-    $letzte = if ($zeilen.Count -gt 0) { $zeilen[0] } else { '' }
-    if ($letzte.Length -gt 90) { $letzte = $letzte.Substring(0, 89) + '.' }
-    if ($letzte) { return ("{0} (Code {1})" -f $letzte, $Run.Code) }
-    return ("Skript meldet Code {0}" -f $Run.Code)
+
+    $zeilen = @($Run.Output -split "`r?`n" | ForEach-Object { $_.Trim() } | Where-Object {
+        $_ -and
+        $_ -notmatch '^(At |In |\+|~)' -and
+        $_ -notmatch '^(CategoryInfo|FullyQualifiedErrorId)'
+    })
+    if ($zeilen.Count -eq 0) { return ("Skript meldet Code {0}" -f $Run.Code) }
+
+    # 'powershell.exe : C:\pfad\zum\skript.ps1 : Die eigentliche Meldung'
+    $text = $zeilen[0]
+    $text = $text -replace '^powershell\.exe\s*:\s*', ''
+    $text = $text -replace '^.*\.ps1\s*:\s*', ''
+    $text = $text.Trim()
+    if (-not $text) { return ("Skript meldet Code {0}" -f $Run.Code) }
+    if ($text.Length -gt 90) { $text = $text.Substring(0, 89) + '.' }
+
+    return ("{0} (Code {1})" -f $text, $Run.Code)
 }

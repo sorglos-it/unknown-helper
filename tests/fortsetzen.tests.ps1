@@ -202,6 +202,19 @@ Test-Case 'Meldung des Skripts landet im Ergebnis' {
     Assert-True ($plan.Items[0].Message -like '*Freigabe*') 'eigener Text uebernommen'
 }
 
+Test-Case 'Fehlermeldung ist frei von PowerShell-Rauschen' {
+    $plan = Neuer-Plan @('meckert')
+    [void](Invoke-UwhPlan $katalog $plan)
+    $m = $plan.Items[0].Message
+
+    Assert-True ($m -notlike '*powershell.exe*')    'kein Programmname'
+    Assert-True ($m -notlike '*.ps1 :*')            'kein Skriptpfad'
+    Assert-True ($m -notlike '*CategoryInfo*')      'keine Fehlerkategorie'
+    Assert-True ($m -notlike '*FullyQualified*')    'keine Fehlerkennung'
+    Assert-True ($m -notlike '*At line*' -and $m -notlike '*In Zeile*') 'keine Zeilenangabe'
+    Assert-True ($m.Length -le 105) 'kurz genug fuer eine Zeile'
+}
+
 Test-Case 'Ein Skript kann uwh nicht uebernehmen' {
     # Laeuft das Skript im selben Prozess, wuerde es Get-UwhRoot ersetzen.
     $angriff = Join-Path $sandkasten 'scripts\angriff.ps1'
