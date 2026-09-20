@@ -398,6 +398,146 @@ Test-Case 'Katalog lehnt einen Eintrag mit Schadkennung ab' {
 }
 
 # ------------------------------------------------------------------
+# Tastensteuerung im Menue
+# ------------------------------------------------------------------
+
+function Taste {
+    param([string]$Name, [string]$Zeichen = "`0")
+    [pscustomobject]@{ Key = $Name; KeyChar = [char]$Zeichen[0] }
+}
+
+function Neues-Menue {
+    param([string]$Filter = '')
+    $rows = Build-UwhRows $script:catalog $Filter @{}
+    $pick = @(Get-UwhPickIndexes $rows)
+    [pscustomobject]@{
+        Rows  = $rows
+        Pick  = $pick
+        Stand = [pscustomobject]@{ Cursor = 0; Filter = $Filter }
+        Wahl  = [ordered]@{}
+    }
+}
+function Druecke {
+    param($M, $Taste)
+    Invoke-UwhPickerKey $Taste $M.Stand $M.Wahl $M.Rows $M.Pick
+}
+
+Test-Case 'Menue: Pfeiltasten bewegen den Cursor' {
+    $m = Neues-Menue
+    [void](Druecke $m (Taste 'DownArrow'))
+    Assert-Equal 1 $m.Stand.Cursor 'runter'
+    [void](Druecke $m (Taste 'UpArrow'))
+    Assert-Equal 0 $m.Stand.Cursor 'wieder rauf'
+}
+
+Test-Case 'Menue: Cursor kann die Liste nicht verlassen' {
+    $m = Neues-Menue
+    1..5 | ForEach-Object { [void](Druecke $m (Taste 'UpArrow')) }
+    Assert-Equal 0 $m.Stand.Cursor 'nicht vor den Anfang'
+
+    1..500 | ForEach-Object { [void](Druecke $m (Taste 'DownArrow')) }
+    Assert-Equal ($m.Pick.Count - 1) $m.Stand.Cursor 'nicht hinter das Ende'
+}
+
+Test-Case 'Menue: Pos1 und Ende springen an den Rand' {
+    $m = Neues-Menue
+    [void](Druecke $m (Taste 'End'))
+    Assert-Equal ($m.Pick.Count - 1) $m.Stand.Cursor 'ans Ende'
+    [void](Druecke $m (Taste 'Home'))
+    Assert-Equal 0 $m.Stand.Cursor 'an den Anfang'
+}
+
+Test-Case 'Menue: Bild-ab springt, bleibt aber im Rahmen' {
+    $m = Neues-Menue
+    [void](Druecke $m (Taste 'PageDown'))
+    Assert-Equal 5 $m.Stand.Cursor 'fuenf weiter'
+    1..100 | ForEach-Object { [void](Druecke $m (Taste 'PageDown')) }
+    Assert-Equal ($m.Pick.Count - 1) $m.Stand.Cursor 'haengt am Ende'
+}
+
+Test-Case 'Menue: Leertaste waehlt an und wieder ab' {
+    $m = Neues-Menue
+    $erster = $m.Rows[$m.Pick[0]].Entry.Key
+
+    [void](Druecke $m (Taste 'Spacebar'))
+    Assert-True $m.Wahl.Contains($erster) 'angewaehlt'
+    Assert-Equal 'install' $m.Wahl[$erster] 'mit der Aktion install'
+
+    [void](Druecke $m (Taste 'Spacebar'))
+    Assert-True (-not $m.Wahl.Contains($erster)) 'wieder abgewaehlt'
+}
+
+Test-Case 'Menue: Leertaste trifft den Eintrag unter dem Cursor' {
+    $m = Neues-Menue
+    [void](Druecke $m (Taste 'DownArrow'))
+    [void](Druecke $m (Taste 'DownArrow'))
+    [void](Druecke $m (Taste 'Spacebar'))
+
+    $erwartet = $m.Rows[$m.Pick[2]].Entry.Key
+    Assert-Equal 1 $m.Wahl.Keys.Count 'genau einer gewaehlt'
+    Assert-True $m.Wahl.Contains($erwartet) 'der richtige'
+}
+
+Test-Case 'Menue: Eingabe braucht eine Auswahl' {
+    $m = Neues-Menue
+    Assert-Equal '' (Druecke $m (Taste 'Enter')) 'ohne Auswahl passiert nichts'
+
+    [void](Druecke $m (Taste 'Spacebar'))
+    Assert-Equal 'weiter' (Druecke $m (Taste 'Enter')) 'mit Auswahl geht es weiter'
+}
+
+Test-Case 'Menue: A waehlt alles an und beim zweiten Mal wieder ab' {
+    $m = Neues-Menue
+    $anzahl = $m.Pick.Count
+
+    [void](Druecke $m (Taste 'A' 'a'))
+    Assert-Equal $anzahl $m.Wahl.Keys.Count 'alle gewaehlt'
+
+    [void](Druecke $m (Taste 'A' 'a'))
+    Assert-Equal 0 $m.Wahl.Keys.Count 'alle wieder abgewaehlt'
+}
+
+Test-Case 'Menue: A ergaenzt eine angefangene Auswahl' {
+    $m = Neues-Menue
+    [void](Druecke $m (Taste 'Spacebar'))
+    [void](Druecke $m (Taste 'A' 'a'))
+    Assert-Equal $m.Pick.Count $m.Wahl.Keys.Count 'aus teilweise wird alles'
+}
+
+Test-Case 'Menue: A trifft nur, was die Suche zeigt' {
+    $m = Neues-Menue 'browser'
+    $sichtbar = $m.Pick.Count
+    Assert-True ($sichtbar -lt $script:catalog.Entries.Count) 'die Suche schraenkt ein'
+
+    [void](Druecke $m (Taste 'A' 'a'))
+    Assert-Equal $sichtbar $m.Wahl.Keys.Count 'nur die sichtbaren'
+}
+
+Test-Case 'Menue: Esc loescht erst die Suche, dann beendet es' {
+    $m = Neues-Menue 'browser'
+    Assert-Equal 'oben' (Druecke $m (Taste 'Escape')) 'erst zurueck nach oben'
+    Assert-Equal '' $m.Stand.Filter 'Suche geloescht'
+    Assert-Equal 'ende' (Druecke $m (Taste 'Escape')) 'dann beenden'
+}
+
+Test-Case 'Menue: Schraegstrich und P melden ihre Handlung' {
+    $m = Neues-Menue
+    Assert-Equal 'suchen' (Druecke $m (Taste 'Oem2' '/')) 'Suche'
+    Assert-Equal 'profil' (Druecke $m (Taste 'P' 'p')) 'Profil'
+    Assert-Equal 'profil' (Druecke $m (Taste 'P' 'P')) 'auch gross geschrieben'
+}
+
+Test-Case 'Menue: leere Trefferliste bringt nichts durcheinander' {
+    $m = Neues-Menue 'xyzgibtsnicht'
+    Assert-Equal 0 $m.Pick.Count 'keine Treffer'
+    foreach ($t in @('DownArrow', 'UpArrow', 'End', 'Spacebar', 'PageDown')) {
+        [void](Druecke $m (Taste $t))
+    }
+    Assert-Equal 0 $m.Stand.Cursor 'Cursor bleibt bei 0'
+    Assert-Equal 0 $m.Wahl.Keys.Count 'nichts gewaehlt'
+}
+
+# ------------------------------------------------------------------
 # Der tatsaechliche Aufruf, nicht nur die Funktionen dahinter
 # ------------------------------------------------------------------
 

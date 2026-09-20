@@ -79,6 +79,13 @@ function Build-UwhRows {
     return $rows.ToArray()
 }
 
+# Die Zeilennummern, auf denen der Cursor stehen darf - Ueberschriften nicht.
+function Get-UwhPickIndexes {
+    param($Rows)
+    if (-not $Rows -or $Rows.Count -eq 0) { return @() }
+    return @(0..($Rows.Count - 1) | Where-Object { $Rows[$_].Kind -eq 'entry' })
+}
+
 function Format-UwhRow {
     param($Row, [bool]$Selected, [bool]$Cursor)
 
@@ -110,7 +117,7 @@ function Show-UwhPicker {
 
     while ($true) {
         $rows = Build-UwhRows $Catalog $filter $Installed
-        $pick = @(0..([Math]::Max($rows.Count - 1, 0)) | Where-Object { $rows.Count -gt 0 -and $rows[$_].Kind -eq 'entry' })
+        $pick = @(Get-UwhPickIndexes $rows)
 
         if ($pick.Count -eq 0) {
             $body = @((New-UwhLine ''), (New-UwhLine '  Nichts gefunden. ESC loescht die Suche.'), (New-UwhLine ''))
@@ -145,41 +152,83 @@ function Show-UwhPicker {
 
         Write-UwhFrame (@(Get-UwhHeader $sub) + $body + $foot)
 
-        $key = [Console]::ReadKey($true)
-        switch ($key.Key) {
-            'UpArrow'    { $cursor-- }
-            'DownArrow'  { $cursor++ }
-            'PageUp'     { $cursor -= 5 }
-            'PageDown'   { $cursor += 5 }
-            'Home'       { $cursor = 0 }
-            'End'        { $cursor = $pick.Count - 1 }
-            'Spacebar'   {
-                if ($pick.Count -gt 0) {
-                    $e = $rows[$pick[$cursor]].Entry
-                    if ($Selection.Contains($e.Key)) { $Selection.Remove($e.Key) }
-                    else { $Selection[$e.Key] = 'install' }
-                }
+        $stand = [pscustomobject]@{ Cursor = $cursor; Filter = $filter }
+        $folge = Invoke-UwhPickerKey ([Console]::ReadKey($true)) $stand $Selection $rows $pick
+        $cursor = $stand.Cursor
+        $filter = $stand.Filter
+
+        switch ($folge) {
+            'weiter' { return 'weiter' }
+            'ende'   { return 'ende' }
+            'profil' { return 'profil' }
+            'suchen' {
+                $filter = Read-UwhInline 'Suchen nach'
+                $cursor = 0; $top = 0
             }
-            'Enter'  { if ($Selection.Keys.Count -gt 0) { return 'weiter' } }
-            'Escape' { if ($filter) { $filter = ''; $cursor = 0; $top = 0 } else { return 'ende' } }
-            default {
-                $c = $key.KeyChar
-                if ($c -eq '/') {
-                    $filter = Read-UwhInline 'Suchen nach'
-                    $cursor = 0; $top = 0
-                } elseif ($c -eq 'a' -or $c -eq 'A') {
-                    $visible = @($rows | Where-Object { $_.Kind -eq 'entry' })
-                    $allSet = $true
-                    foreach ($r in $visible) { if (-not $Selection.Contains($r.Entry.Key)) { $allSet = $false; break } }
-                    foreach ($r in $visible) {
-                        if ($allSet) { $Selection.Remove($r.Entry.Key) } else { $Selection[$r.Entry.Key] = 'install' }
-                    }
-                } elseif ($c -eq 'p' -or $c -eq 'P') {
-                    return 'profil'
+            'oben'   { $top = 0 }
+        }
+    }
+}
+
+# Was eine Taste bewirkt - ohne Bildschirm und ohne Tastatur, damit pruefbar.
+# Aendert $Stand (Cursor, Filter) und $Selection, liefert die naechste Handlung.
+function Invoke-UwhPickerKey {
+    param($Key, $Stand, $Selection, $Rows, $Pick)
+
+    switch ($Key.Key) {
+        'UpArrow'   { $Stand.Cursor-- }
+        'DownArrow' { $Stand.Cursor++ }
+        'PageUp'    { $Stand.Cursor -= 5 }
+        'PageDown'  { $Stand.Cursor += 5 }
+        'Home'      { $Stand.Cursor = 0 }
+        'End'       { $Stand.Cursor = $Pick.Count - 1 }
+
+        'Spacebar' {
+            if ($Pick.Count -gt 0) {
+                $e = $Rows[$Pick[$Stand.Cursor]].Entry
+                if ($Selection.Contains($e.Key)) { $Selection.Remove($e.Key) }
+                else { $Selection[$e.Key] = 'install' }
+            }
+        }
+
+        'Enter' {
+            # Ohne Auswahl gibt es nichts zu tun - die Taste tut dann nichts.
+            if ($Selection.Keys.Count -gt 0) { return 'weiter' }
+        }
+
+        'Escape' {
+            # Erst die Suche loeschen, beim zweiten Mal beenden.
+            if ($Stand.Filter) { $Stand.Filter = ''; $Stand.Cursor = 0; return 'oben' }
+            return 'ende'
+        }
+
+        default {
+            $c = [string]$Key.KeyChar
+            if ($c -eq '/') { return 'suchen' }
+
+            if ($c -eq 'a' -or $c -eq 'A') {
+                # Sind schon alle sichtbaren gewaehlt, wird abgewaehlt.
+                $sichtbar = @($Rows | Where-Object { $_.Kind -eq 'entry' })
+                $alleDrin = $sichtbar.Count -gt 0
+                foreach ($r in $sichtbar) {
+                    if (-not $Selection.Contains($r.Entry.Key)) { $alleDrin = $false; break }
                 }
+                foreach ($r in $sichtbar) {
+                    if ($alleDrin) { $Selection.Remove($r.Entry.Key) }
+                    else { $Selection[$r.Entry.Key] = 'install' }
+                }
+            } elseif ($c -eq 'p' -or $c -eq 'P') {
+                return 'profil'
             }
         }
     }
+
+    # Cursor darf die Liste nie verlassen.
+    if ($Stand.Cursor -lt 0) { $Stand.Cursor = 0 }
+    if ($Pick.Count -eq 0) { $Stand.Cursor = 0 }
+    elseif ($Stand.Cursor -ge $Pick.Count) { $Stand.Cursor = $Pick.Count - 1 }
+
+    return ''
 }
 
 # ------------------------------------------------------------------
