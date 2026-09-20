@@ -206,7 +206,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (5 Dateien, 95 ohne Systemzugriff)
+tests\               Tests (6 Dateien, 115 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
@@ -226,6 +226,10 @@ powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
 ```
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File tests\provider.tests.ps1
+```
+
+```powershell
 powershell -ExecutionPolicy Bypass -File tests\einrichtung.tests.ps1
 ```
 
@@ -238,13 +242,15 @@ powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 | `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
 | `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü samt Tastensteuerung, Eingabeprüfung, Selbstaktualisierung, Aufruf über die Befehlszeile | nichts |
 | `fortsetzen.tests.ps1` | eigene Skripte, Neustart-Entscheidung, Fortsetzen | nichts |
+| `provider.tests.ps1` | Windows-Funktionen, optionale Komponenten, PowerShell-Module | nichts |
 | `einrichtung.tests.ps1` | Einrichtung und Selbstaktualisierung von Anfang bis Ende | nichts |
 | `online.tests.ps1` | ob es jedes Paket wirklich gibt, und ob der Direkt-Download Prüfsumme und https durchsetzt | Internet, winget; Windows-Einträge zusätzlich Administratorrechte |
 
-Die ersten vier installieren nichts, ändern nichts am System und starten nichts
-neu. Der Neustart wird durch eine Attrappe ersetzt, und `einrichtung.tests.ps1`
-baut sich ein eigenes Archiv, statt es von GitHub zu holen — alles davor und
-danach läuft echt.
+Nur `online.tests.ps1` geht ins Netz. Die anderen fünf installieren nichts,
+ändern nichts am System und starten nichts neu: der Neustart und die
+Windows-Befehle werden durch Attrappen ersetzt, und `einrichtung.tests.ps1` baut
+sich ein eigenes Archiv, statt es von GitHub zu holen. Alles davor und danach
+läuft echt.
 
 ## Lizenz
 
