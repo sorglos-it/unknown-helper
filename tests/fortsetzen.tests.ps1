@@ -131,6 +131,23 @@ scripts:
     provider: script
     file: meckert.ps1
     admin: false
+  pflicht:
+    name: Pflicht
+    description: Braucht eine Angabe ohne Vorgabe
+    category: Test
+    provider: script
+    file: spur.ps1
+    admin: false
+    actions:
+      - name: install
+        prompts:
+          - question: Domaene?
+            variable: DOMAENE
+            type: text
+          - question: Antwort?
+            variable: ANTWORT
+            type: text
+            default: hatvorgabe
 '@ | Set-Content -LiteralPath (Join-Path $sandkasten 'config.yaml') -Encoding UTF8
 
 $env:UWH_SPUR = $spurDatei
@@ -253,6 +270,44 @@ Test-Case 'Rueckgabe 3010 meldet Neustartbedarf' {
     [void](Invoke-UwhPlan $katalog $plan)
     Assert-Equal 'ok' $plan.Items[0].Status 'Status'
     Assert-True ($plan.Items[0].Message -like '*Neustart*') 'Neustart gemeldet'
+}
+
+Test-Case 'Fehlende Pflichtangabe wird im stillen Lauf gemeldet, nicht geraten' {
+    Neue-Spur
+    $env:UWH_NAME = 'p'
+    $plan = Neuer-Plan @('pflicht')
+    Invoke-UwhCollect $katalog $plan
+
+    Assert-Equal 'fehler' $plan.Items[0].Status 'schon beim Sammeln erkannt'
+    Assert-True ($plan.Items[0].Message -like '*DOMAENE*') 'nennt die fehlende Angabe'
+    Assert-True ($plan.Items[0].Message -notlike '*ANTWORT*') 'die mit Vorgabe fehlt nicht'
+}
+
+Test-Case 'Ein unvollstaendiger Schritt wird nicht ausgefuehrt' {
+    Neue-Spur
+    $env:UWH_NAME = 'p'
+    $plan = Neuer-Plan @('pflicht', 'eins')
+    Invoke-UwhCollect $katalog $plan
+    [void](Invoke-UwhPlan $katalog $plan)
+
+    $spur = @(Lies-Spur)
+    Assert-Equal 1 $spur.Count 'nur der vollstaendige Schritt lief'
+    Assert-Equal 'fehler' $plan.Items[0].Status 'unvollstaendiger bleibt Fehler'
+    Assert-Equal 'ok'     $plan.Items[1].Status 'der andere laeuft normal'
+    Assert-Equal 2 $plan.Index 'beide Schritte abgehakt'
+}
+
+Test-Case 'Mit Antwort aus dem Profil laeuft derselbe Schritt durch' {
+    Neue-Spur
+    $env:UWH_NAME = 'p'
+    $auswahl = @([pscustomobject]@{ Key = 'pflicht'; Action = 'install'
+                                    Answers = @{ DOMAENE = 'firma.lan' } })
+    $plan = New-UwhPlan $katalog $auswahl -Unattended $true -RebootPolicy 'never'
+    Invoke-UwhCollect $katalog $plan
+    Assert-Equal 'offen' $plan.Items[0].Status 'nichts zu beanstanden'
+
+    [void](Invoke-UwhPlan $katalog $plan)
+    Assert-Equal 'ok' $plan.Items[0].Status 'lief durch'
 }
 
 # ------------------------------------------------------------------

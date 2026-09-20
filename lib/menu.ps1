@@ -4,6 +4,7 @@ Set-StrictMode -Version 2.0
 
 $script:UwhWidth = 78
 $script:UwhLastHeight = 0
+$script:UwhLastFrameWidth = 0
 
 # Der Rahmen ist hoechstens 78 Zeichen breit, passt sich aber schmaleren
 # Fenstern an - sonst fehlt rechts der Rand und alles sieht kaputt aus.
@@ -45,6 +46,15 @@ function Write-UwhFrame {
 
     try {
         $w = [Console]::WindowWidth - 1
+
+        # Wird das Fenster waehrend des Laufs schmaler, sind die alten Zeilen
+        # umgebrochen und stehen noch da. Einmal leeren raeumt das auf.
+        if ($w -ne $script:UwhLastFrameWidth) {
+            Clear-Host
+            $script:UwhLastHeight = 0
+            $script:UwhLastFrameWidth = $w
+        }
+
         [Console]::SetCursorPosition(0, 0)
         foreach ($l in $Lines) {
             $t = $l
@@ -346,7 +356,11 @@ function Read-UwhAnswer {
         $in = (Read-Host).Trim()
         if ($in -eq '') { $in = $default }
         if ($in -ne '') { return $in }
-        Write-Host '  Bitte einen Wert eingeben.' -ForegroundColor Yellow
+
+        # Ohne Vorgabe geht es ohne Antwort nicht weiter - dann muss man auch
+        # wissen, wie man wieder herauskommt.
+        Write-Host '  Ohne Angabe geht es hier nicht weiter.' -ForegroundColor Yellow
+        Write-Host '  Abbrechen mit Strg+C.' -ForegroundColor DarkGray
     }
 }
 

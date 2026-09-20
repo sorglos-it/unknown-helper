@@ -26,10 +26,39 @@ function Get-UwhStateFile {
 
 function Save-UwhState {
     param($State)
+
     $file = Get-UwhStateFile $State.Id
     $dir = Split-Path -Parent $file
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
-    $State | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $file -Encoding UTF8
+
+    ConvertTo-UwhStateFuerPlatte $State | ConvertTo-Json -Depth 8 |
+        Set-Content -LiteralPath $file -Encoding UTF8
+}
+
+# Eine Kopie zum Schreiben - der laufende Plan darf nicht veraendert werden,
+# sonst waeren die Antworten danach im Arbeitsspeicher verschluesselt.
+function ConvertTo-UwhStateFuerPlatte {
+    param($State)
+
+    $items = @()
+    foreach ($i in @($State.Items)) {
+        $geschuetzt = [ordered]@{}
+        foreach ($k in (ConvertTo-UwhHashtable $i.Answers).Keys) {
+            $geschuetzt[$k] = Protect-UwhText ([string](ConvertTo-UwhHashtable $i.Answers)[$k])
+        }
+        $items += [pscustomobject]@{
+            Key = $i.Key; Action = $i.Action; Answers = $geschuetzt
+            Status = $i.Status; Message = $i.Message
+        }
+    }
+
+    [pscustomobject]@{
+        Id = $State.Id; Created = $State.Created
+        Unattended = $State.Unattended; ContinueOnError = $State.ContinueOnError
+        RebootPolicy = $State.RebootPolicy; Index = $State.Index
+        NeedsAdmin = $State.NeedsAdmin; MayReboot = $State.MayReboot
+        LogFile = $State.LogFile; Items = $items
+    }
 }
 
 function Import-UwhState {
@@ -39,6 +68,14 @@ function Import-UwhState {
     $state = Get-Content -LiteralPath $file -Raw -Encoding UTF8 | ConvertFrom-Json
     # ConvertFrom-Json macht aus einer einelementigen Liste ein einzelnes Objekt.
     $state.Items = @($state.Items)
+
+    foreach ($i in $state.Items) {
+        $klar = @{}
+        foreach ($p in $i.Answers.PSObject.Properties) {
+            $klar[$p.Name] = Unprotect-UwhText ([string]$p.Value)
+        }
+        $i.Answers = $klar
+    }
     return $state
 }
 
@@ -144,14 +181,14 @@ function Invoke-UwhCollect {
 
         if (-not $Plan.Unattended) { Write-Host ("  {0}" -f $entry.Name) -ForegroundColor Cyan }
 
+        $fehlend = New-Object System.Collections.Generic.List[string]
+
         foreach ($p in $action.Prompts) {
             $preset = if ($answers.ContainsKey($p.Variable)) { [string]$answers[$p.Variable] } else { '' }
 
             if ($Plan.Unattended) {
                 if ($preset -eq '') { $preset = $p.Default }
-                if ($preset -eq '' -and $p.Type -ne 'yesno') {
-                    Write-UwhWarn "$($entry.Name): keine Antwort fuer '$($p.Variable)' hinterlegt."
-                }
+                if ($preset -eq '' -and $p.Type -ne 'yesno') { $fehlend.Add($p.Variable) }
                 $answers[$p.Variable] = $preset
             } else {
                 $answers[$p.Variable] = Read-UwhAnswer $p $preset
@@ -159,6 +196,15 @@ function Invoke-UwhCollect {
         }
 
         $item.Answers = $answers
+
+        # Im stillen Lauf gibt es niemanden, der nachtragen koennte. Mit einem
+        # Leerwert weiterzumachen hiesse, etwas falsch einzurichten, ohne dass
+        # es jemand merkt - also wird der Schritt uebersprungen und gemeldet.
+        if ($fehlend.Count -gt 0) {
+            $item.Status = 'fehler'
+            $item.Message = 'Keine Angabe fuer: ' + ($fehlend -join ', ')
+            Write-UwhWarn ("{0} wird uebersprungen - {1}" -f $entry.Name, $item.Message)
+        }
         if (-not $Plan.Unattended) { Write-Host '' }
     }
 }
@@ -188,6 +234,15 @@ function Invoke-UwhPlan {
         }
 
         Write-UwhStep ('[{0}/{1}] {2}' -f ($Plan.Index + 1), $total, $entry.Name)
+
+        # In der Sammelphase bereits als unvollstaendig erkannt.
+        if ($item.Status -eq 'fehler') {
+            Write-UwhErr ("{0} - {1}" -f $entry.Name, $item.Message)
+            $Plan.Index++
+            Save-UwhState $Plan
+            if (-not $Plan.ContinueOnError) { return $false }
+            continue
+        }
 
         if ($entry.Note) { Write-Host "  $($entry.Note)" -ForegroundColor DarkGray }
 

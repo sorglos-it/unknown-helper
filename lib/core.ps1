@@ -160,6 +160,48 @@ function Test-UwhHttpsUrl {
 }
 
 # ------------------------------------------------------------------
+# Antworten auf der Platte schuetzen
+# ------------------------------------------------------------------
+#
+# Ein unterbrochener Lauf muss die gesammelten Antworten ueberstehen, also
+# liegen sie in der Zustandsdatei. Sie sind mit dem Windows-Datenschutz
+# verschluesselt: lesen kann sie nur derselbe Benutzer auf demselben Rechner.
+# Ein Kennwort liegt damit nicht im Klartext herum, auch wenn ein Lauf
+# abgebrochen wird und die Datei stehenbleibt.
+
+function Protect-UwhText {
+    param([AllowEmptyString()][string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return '' }
+    try {
+        $sicher = ConvertTo-SecureString -String $Text -AsPlainText -Force
+        return 'dpapi:' + (ConvertFrom-SecureString -SecureString $sicher)
+    } catch {
+        # Ohne Verschluesselung lieber gar nichts speichern als im Klartext.
+        Write-UwhLog 'WARN' "Antwort konnte nicht geschuetzt werden: $($_.Exception.Message)"
+        return ''
+    }
+}
+
+function Unprotect-UwhText {
+    param([AllowEmptyString()][string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return '' }
+    if (-not $Text.StartsWith('dpapi:')) { return $Text }
+
+    $bstr = [IntPtr]::Zero
+    try {
+        $sicher = ConvertTo-SecureString -String $Text.Substring(6) -ErrorAction Stop
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($sicher)
+        return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+    } catch {
+        # Anderer Benutzer oder anderer Rechner - die Antwort ist verloren.
+        Write-UwhLog 'WARN' 'Eine gespeicherte Antwort konnte nicht gelesen werden.'
+        return ''
+    } finally {
+        if ($bstr -ne [IntPtr]::Zero) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+    }
+}
+
+# ------------------------------------------------------------------
 # Netzwerk
 # ------------------------------------------------------------------
 

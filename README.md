@@ -67,6 +67,11 @@ Auswahl zurück, damit nie unklar ist, was gleich passiert.
 Alle Rückfragen kommen **vor** der Installation. Danach läuft alles ohne
 Unterbrechung durch — auch über einen Neustart hinweg.
 
+Die Spalte **installiert** zeigt, was winget auf dem Rechner findet. Bei
+Windows-Funktionen und optionalen Komponenten bleibt sie leer: das lässt sich
+nur mit Administratorrechten feststellen, und das Menü läuft bewusst ohne sie —
+die werden erst zur Ausführung angefordert.
+
 ## Profile
 
 Nach der Auswahl fragt uwh, ob sie als Profil gespeichert werden soll. Das Profil
@@ -210,7 +215,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (6 Dateien, 121 ohne Systemzugriff)
+tests\               Tests (6 Dateien, 126 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.

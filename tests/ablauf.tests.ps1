@@ -449,6 +449,34 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     Assert-True (-not (Test-Path (Join-Path $ziel 'custom\profiles\x.yaml'))) 'custom aus dem Archiv nicht uebernommen'
 }
 
+Test-Case 'Antworten liegen nicht im Klartext auf der Platte' {
+    $auswahl = @([pscustomobject]@{ Key = 'explorer'; Action = 'install'
+                                    Answers = @{ ENDUNGEN = 'ja'; KENNWORT = 'Hu7xQzGeheim' } })
+    $plan = New-UwhPlan $script:catalog $auswahl -Unattended $true
+    Save-UwhState $plan
+    try {
+        $text = Get-Content -LiteralPath (Get-UwhStateFile $plan.Id) -Raw
+        Assert-True ($text -notlike '*Hu7xQzGeheim*') 'Kennwort nicht im Klartext'
+        Assert-True ($text -like '*dpapi:*')          'als verschluesselt gekennzeichnet'
+        Assert-True ($text -like '*ENDUNGEN*')        'Variablennamen bleiben lesbar'
+
+        $zurueck = Import-UwhState $plan.Id
+        Assert-Equal 'Hu7xQzGeheim' $zurueck.Items[0].Answers['KENNWORT'] 'wieder lesbar'
+        Assert-Equal 'ja'           $zurueck.Items[0].Answers['ENDUNGEN'] 'auch die harmlose'
+
+        # Der laufende Plan darf davon nichts mitbekommen.
+        Assert-Equal 'Hu7xQzGeheim' $plan.Items[0].Answers['KENNWORT'] 'Plan im Speicher unveraendert'
+    } finally {
+        Remove-UwhState $plan.Id
+    }
+}
+
+Test-Case 'Unlesbarer Schutz gibt nichts preis und stuerzt nicht ab' {
+    Assert-Equal '' (Unprotect-UwhText 'dpapi:voellig-kaputt') 'kaputte Daten ergeben nichts'
+    Assert-Equal 'klartext' (Unprotect-UwhText 'klartext')     'unverschluesselt bleibt unveraendert'
+    Assert-Equal '' (Protect-UwhText '')                       'leer bleibt leer'
+}
+
 Test-Case 'Netzlaufwerk wird zum UNC-Pfad aufgeloest' {
     # Lokale Pfade und UNC-Pfade bleiben unveraendert.
     Assert-Equal 'C:\Temp\x.ps1' (Resolve-UwhUncPath 'C:\Temp\x.ps1') 'lokaler Pfad'
