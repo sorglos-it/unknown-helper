@@ -6,16 +6,33 @@
 
     Es wird kein git gebraucht. uwh landet unter:
         %LOCALAPPDATA%\Programs\uwh
+
+    Aus dem eigenen Netz statt aus dem Internet:
+        .\install.ps1 -Quelle \server\freigabe\uwh-main.zip
+
+    Still, ohne Desktop-Verknuepfung und ohne Start:
+        .\install.ps1 -KeineVerknuepfung -KeinStart
 #>
 [CmdletBinding()]
 param(
     [string]$Ziel,
-    [switch]$KeinStart
+    [string]$Quelle,
+    [switch]$KeinStart,
+    [switch]$KeineVerknuepfung
 )
 
 $ErrorActionPreference = 'Stop'
 
+# Ohne Angabe von GitHub. Mit -Quelle geht auch ein Archiv aus dem eigenen
+# Netz - fuer Rollouts ohne Internetzugang.
 $Zip = 'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/main'
+if ($Quelle) {
+    if (Test-Path -LiteralPath $Quelle) {
+        $Zip = ([uri]((Resolve-Path -LiteralPath $Quelle).ProviderPath)).AbsoluteUri
+    } else {
+        $Zip = $Quelle
+    }
+}
 
 if (-not $Ziel) { $Ziel = Join-Path $env:LOCALAPPDATA 'Programs\uwh' }
 
@@ -77,14 +94,16 @@ $tmp = Join-Path $env:TEMP ('uwh-setup-{0}' -f [guid]::NewGuid().ToString('N').S
 $zipFile = "$tmp.zip"
 
 try {
-    Write-Host '  Lade uwh herunter...'
+    if ($Quelle) { Write-Host "  Hole uwh aus $Quelle ..." } else { Write-Host '  Lade uwh herunter...' }
     Invoke-WebRequest -Uri $Zip -OutFile $zipFile -UseBasicParsing -ErrorAction Stop
 
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     [IO.Compression.ZipFile]::ExtractToDirectory($zipFile, $tmp)
 
-    $quelle = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
-    if (-not $quelle) { throw 'Das Archiv war leer.' }
+    # Nicht '$quelle' nennen: PowerShell unterscheidet keine Gross- und
+    # Kleinschreibung, das waere der Parameter -Quelle vom Typ [string].
+    $entpackt = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
+    if (-not $entpackt) { throw 'Das Archiv enthielt keinen Ordner.' }
 
     if (-not (Test-Path $Ziel)) { New-Item -ItemType Directory -Path $Ziel -Force | Out-Null }
 
@@ -105,11 +124,13 @@ try {
             else { Copy-Item -LiteralPath $i.FullName -Destination $z -Force }
         }
     }
-    Kopiere-Baum $quelle.FullName $Ziel $auslassen
+    Kopiere-Baum $entpackt.FullName $Ziel $auslassen
 
     Write-Host "  Eingerichtet unter: $Ziel" -ForegroundColor Green
 
     # Verknuepfung auf dem Desktop, damit man es wiederfindet.
+    # Bei stillen Rollouts nicht erwuenscht - dann -KeineVerknuepfung.
+    if (-not $KeineVerknuepfung) {
     try {
         $lnk = Join-Path ([Environment]::GetFolderPath('Desktop')) 'uwh.lnk'
         $shell = New-Object -ComObject WScript.Shell
@@ -123,6 +144,7 @@ try {
         Write-Host '  Verknuepfung auf dem Desktop angelegt.' -ForegroundColor Green
     } catch {
         Write-Host '  Verknuepfung konnte nicht angelegt werden.' -ForegroundColor DarkGray
+    }
     }
 
     Write-Host ''

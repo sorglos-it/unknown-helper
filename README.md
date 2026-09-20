@@ -16,6 +16,13 @@ irm https://raw.githubusercontent.com/sorglos-it/uwh/main/install.ps1 | iex
 Danach liegt eine Verknüpfung **uwh** auf dem Desktop. Mehr ist nicht nötig —
 kein git, keine Zusatzmodule.
 
+Für Rollouts ohne Internetzugang lässt sich das Archiv auch aus dem eigenen Netz
+holen, wahlweise ganz still:
+
+```powershell
+.\install.ps1 -Quelle \server\freigabe\uwh-main.zip -KeineVerknuepfung -KeinStart
+```
+
 ## Bedienen
 
 ```
@@ -199,7 +206,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (4 Dateien, 81 ohne Systemzugriff)
+tests\               Tests (5 Dateien, 95 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
@@ -219,6 +226,10 @@ powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
 ```
 
 ```powershell
+powershell -ExecutionPolicy Bypass -File tests\einrichtung.tests.ps1
+```
+
+```powershell
 powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 ```
 
@@ -227,11 +238,13 @@ powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 | `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
 | `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü samt Tastensteuerung, Eingabeprüfung, Selbstaktualisierung, Aufruf über die Befehlszeile | nichts |
 | `fortsetzen.tests.ps1` | eigene Skripte, Neustart-Entscheidung, Fortsetzen | nichts |
+| `einrichtung.tests.ps1` | Einrichtung und Selbstaktualisierung von Anfang bis Ende | nichts |
 | `online.tests.ps1` | ob es jedes Paket wirklich gibt, und ob der Direkt-Download Prüfsumme und https durchsetzt | Internet, winget; Windows-Einträge zusätzlich Administratorrechte |
 
-Die ersten drei installieren nichts, ändern nichts am System und starten nichts
-neu — der Neustart wird durch eine Attrappe ersetzt, alles davor und danach
-läuft echt.
+Die ersten vier installieren nichts, ändern nichts am System und starten nichts
+neu. Der Neustart wird durch eine Attrappe ersetzt, und `einrichtung.tests.ps1`
+baut sich ein eigenes Archiv, statt es von GitHub zu holen — alles davor und
+danach läuft echt.
 
 ## Lizenz
 

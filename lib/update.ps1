@@ -7,7 +7,9 @@ $script:UwhRepoZip = 'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/
 
 function Get-UwhLocalVersion {
     $file = Get-UwhPath 'VERSION'
-    if (Test-Path -LiteralPath $file) { return (Get-Content -LiteralPath $file -Raw).Trim() }
+    if (Test-Path -LiteralPath $file) {
+        return ConvertTo-UwhVersionText (Get-Content -LiteralPath $file -Raw)
+    }
     return '0.0.0'
 }
 
@@ -15,10 +17,24 @@ function Get-UwhRemoteVersion {
     Initialize-UwhTls
     try {
         $r = Invoke-WebRequest -Uri "$script:UwhRepoRaw/VERSION" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
-        return ([string]$r.Content).Trim()
+        return ConvertTo-UwhVersionText $r.Content
     } catch {
         return $null
     }
+}
+
+# Der Inhalt kommt je nach Quelle als Text oder als Bytes, mit oder ohne
+# Byte-Reihenfolge-Markierung. Ein unbemerkter BOM wuerde den Versionsvergleich
+# scheitern lassen - und damit die Aktualisierung stillschweigend abschalten.
+function ConvertTo-UwhVersionText {
+    param($Inhalt)
+
+    if ($null -eq $Inhalt) { return '' }
+    if ($Inhalt -is [byte[]]) { $Inhalt = [Text.Encoding]::UTF8.GetString($Inhalt) }
+
+    $text = [string]$Inhalt
+    $text = $text.TrimStart([char]0xFEFF)
+    return $text.Trim()
 }
 
 function Test-UwhNewer {
