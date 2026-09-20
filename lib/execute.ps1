@@ -129,6 +129,7 @@ function Invoke-UwhCollect {
     if ($withPrompts.Count -eq 0) { return }
 
     if (-not $Plan.Unattended) {
+        Set-UwhWidth
         Clear-Host
         Get-UwhHeader 'Ein paar Angaben werden gebraucht' | ForEach-Object { Write-Host $_ }
         Write-Host ''
@@ -302,6 +303,7 @@ function Unregister-UwhResume {
 function Show-UwhReport {
     param($Catalog, $Plan)
 
+    Set-UwhWidth
     $ok    = @($Plan.Items | Where-Object { $_.Status -eq 'ok' })
     $skip  = @($Plan.Items | Where-Object { $_.Status -eq 'nichts' })
     $fail  = @($Plan.Items | Where-Object { $_.Status -eq 'fehler' })

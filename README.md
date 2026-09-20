@@ -210,7 +210,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (6 Dateien, 118 ohne Systemzugriff)
+tests\               Tests (6 Dateien, 121 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.

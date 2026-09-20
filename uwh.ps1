@@ -55,6 +55,7 @@ if ($Version) { Write-Host "uwh $global:UwhVersion"; exit 0 }
 if ($Doctor) {
     $os = Get-UwhOsInfo
     Write-Host ''
+    Set-UwhWidth
     Get-UwhHeader 'Systempruefung' | ForEach-Object { Write-Host $_ }
     Write-Host ''
     Write-Host ("  Windows           {0} (Build {1}, {2})" -f $os.Caption, $os.Build, $os.Arch)
@@ -137,6 +138,7 @@ function Invoke-UwhRun {
         }
     }
 
+    Set-UwhWidth
     Clear-Host
     Get-UwhHeader 'Installation laeuft' | ForEach-Object { Write-Host $_ }
 

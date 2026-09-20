@@ -322,6 +322,57 @@ Test-Case 'Kein Name und keine Beschreibung wird abgeschnitten' {
     }
 }
 
+Test-Case 'Der Rahmen passt sich schmalen Fenstern an' {
+    $vorher = $script:UwhWidth
+    try {
+        foreach ($breite in @(46, 50, 60, 64, 70, 78)) {
+            $script:UwhWidth = $breite
+            $rows = Build-UwhRows $script:catalog '' @{ '7zip' = $true } 'install'
+
+            $zeilen = @(Get-UwhHeader 'Test')
+            foreach ($r in ($rows | Select-Object -First 12)) {
+                $zeilen += Format-UwhRow $r $true $true
+            }
+            $zeilen += New-UwhRule
+
+            foreach ($z in $zeilen) {
+                if ($z.Length -ne $breite) {
+                    throw "bei Breite $breite ist eine Zeile $($z.Length) Zeichen lang: '$z'"
+                }
+            }
+        }
+    } finally {
+        $script:UwhWidth = $vorher
+    }
+}
+
+Test-Case 'In schmalen Fenstern faellt die Spalte installiert weg' {
+    $vorher = $script:UwhWidth
+    try {
+        $rows = Build-UwhRows $script:catalog '' @{ '7zip' = $true } 'install'
+        $zeile = $rows | Where-Object { $_.Kind -eq 'entry' -and $_.Entry.Key -eq '7zip' } | Select-Object -First 1
+
+        $script:UwhWidth = 78
+        Assert-True ((Format-UwhRow $zeile $false $false) -like '*installiert*') 'breit: Spalte da'
+
+        $script:UwhWidth = 56
+        Assert-True ((Format-UwhRow $zeile $false $false) -notlike '*installiert*') 'schmal: Spalte weg'
+    } finally {
+        $script:UwhWidth = $vorher
+    }
+}
+
+Test-Case 'Set-UwhWidth bleibt in sinnvollen Grenzen' {
+    $vorher = $script:UwhWidth
+    try {
+        Set-UwhWidth
+        Assert-True ($script:UwhWidth -ge 46) 'nicht schmaler als 46'
+        Assert-True ($script:UwhWidth -le 78) 'nicht breiter als 78'
+    } finally {
+        $script:UwhWidth = $vorher
+    }
+}
+
 Test-Case 'Suche findet ueber Name und Beschreibung' {
     $rows = Build-UwhRows $script:catalog 'browser' @{}
     $treffer = @($rows | Where-Object { $_.Kind -eq 'entry' })

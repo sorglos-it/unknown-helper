@@ -179,6 +179,7 @@ function Save-UwhProfile {
 function Show-UwhProfilePicker {
     $names = @(Get-UwhProfileNames)
 
+    Set-UwhWidth
     $script:UwhLastHeight = 0
     Clear-Host
     Get-UwhHeader 'Profil laden' | ForEach-Object { Write-Host $_ }

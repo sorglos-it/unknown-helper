@@ -5,6 +5,16 @@ Set-StrictMode -Version 2.0
 $script:UwhWidth = 78
 $script:UwhLastHeight = 0
 
+# Der Rahmen ist hoechstens 78 Zeichen breit, passt sich aber schmaleren
+# Fenstern an - sonst fehlt rechts der Rand und alles sieht kaputt aus.
+function Set-UwhWidth {
+    try {
+        $script:UwhWidth = [Math]::Max(46, [Math]::Min(78, [Console]::WindowWidth - 1))
+    } catch {
+        $script:UwhWidth = 78
+    }
+}
+
 # Die drei Betriebsarten des Menues, in dieser Reihenfolge durchgeschaltet.
 $script:UwhModi = @(
     [pscustomobject]@{ Name = 'install';   Titel = 'Installieren'; Frage = 'Was soll installiert werden?' }
@@ -55,7 +65,7 @@ function Write-UwhFrame {
 function Get-UwhHeader {
     param([string]$Subtitle)
     $v = if (Get-Variable UwhVersion -Scope Global -ErrorAction SilentlyContinue) { $global:UwhVersion } else { '' }
-    $left = '  uwh - unknown windows helper'
+    $left = if ($script:UwhWidth -ge 60) { '  uwh - unknown windows helper' } else { '  uwh' }
     $right = "v$v  "
     $pad = $script:UwhWidth - 2 - $left.Length - $right.Length
     if ($pad -lt 1) { $pad = 1 }
@@ -107,14 +117,23 @@ function Format-UwhRow {
 
     $mark = if ($Cursor) { '>' } else { ' ' }
     $box  = if ($Selected) { '[x]' } else { '[ ]' }
-    # Breiten sind aufeinander abgestimmt: 2+1+1+3+1+24+1+31+1+11 = 76 = Innenbreite.
-    $name = $Row.Entry.Name
-    if ($name.Length -gt 24) { $name = $name.Substring(0, 23) + '.' }
-    $desc = $Row.Entry.Description
-    if ($desc.Length -gt 31) { $desc = $desc.Substring(0, 30) + '.' }
-    $state = if ($Row.Installed) { 'installiert' } else { '' }
 
-    $text = '  {0} {1} {2} {3} {4}' -f $mark, $box, $name.PadRight(24), $desc.PadRight(31), $state
+    # Feste Zeichen: 2 Einzug + Zeiger + Leer + [x] + Leer + Leer + Leer = 10.
+    # Der Rest wird auf Name und Beschreibung verteilt; in schmalen Fenstern
+    # faellt die Spalte 'installiert' als erstes weg.
+    $inner = $script:UwhWidth - 2
+    $platzStand = if ($inner -ge 70) { 11 } else { 0 }
+    $rest = $inner - 10 - $platzStand
+    $breiteName = [Math]::Max(8, [Math]::Min(24, [int]($rest * 0.44)))
+    $breiteDesc = [Math]::Max(4, $rest - $breiteName)
+
+    $name = $Row.Entry.Name
+    if ($name.Length -gt $breiteName) { $name = $name.Substring(0, $breiteName - 1) + '.' }
+    $desc = $Row.Entry.Description
+    if ($desc.Length -gt $breiteDesc) { $desc = $desc.Substring(0, $breiteDesc - 1) + '.' }
+
+    $text = '  {0} {1} {2} {3}' -f $mark, $box, $name.PadRight($breiteName), $desc.PadRight($breiteDesc)
+    if ($platzStand -gt 0 -and $Row.Installed) { $text += ' installiert' }
     return New-UwhLine $text
 }
 
@@ -131,6 +150,7 @@ function Show-UwhPicker {
     $modusNr = 0
 
     while ($true) {
+        Set-UwhWidth
         $modus = Get-UwhModus $modusNr
         $rows = Build-UwhRows $Catalog $filter $Installed $modus.Name
         $pick = @(Get-UwhPickIndexes $rows)
@@ -161,13 +181,23 @@ function Show-UwhPicker {
 
         $sub = if ($filter) { "Suche: $filter" } else { $modus.Frage }
         $count = $Selection.Keys.Count
-        $foot = @(
-            (New-UwhRule)
-            (New-UwhLine ('  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden'))
-            (New-UwhLine ('  A alle an/aus    P Profil laden    M Modus: {0}' -f $modus.Titel.PadRight(14)))
-            (New-UwhLine ('{0}{1} ausgewaehlt' -f (' ' * 58), $count))
-            (New-UwhRule)
-        )
+        if ($script:UwhWidth -ge 74) {
+            $foot = @(
+                (New-UwhRule)
+                (New-UwhLine '  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden')
+                (New-UwhLine ('  A alle an/aus    P Profil laden    M Modus: {0}' -f $modus.Titel.PadRight(14)))
+                (New-UwhLine ('{0}{1} ausgewaehlt' -f (' ' * ($script:UwhWidth - 20)), $count))
+                (New-UwhRule)
+            )
+        } else {
+            $foot = @(
+                (New-UwhRule)
+                (New-UwhLine '  Pfeile  LEER An/Aus  ENTER Weiter')
+                (New-UwhLine '  / Suchen  A alle  P Profil  M Modus  ESC Ende')
+                (New-UwhLine ('  {0}: {1} ausgewaehlt' -f $modus.Titel, $count))
+                (New-UwhRule)
+            )
+        }
 
         Write-UwhFrame (@(Get-UwhHeader $sub) + $body + $foot)
 
@@ -340,6 +370,7 @@ function Read-UwhConfirm {
 function Show-UwhSummary {
     param($Catalog, $Plan)
 
+    Set-UwhWidth
     $script:UwhLastHeight = 0
     Clear-Host
 
