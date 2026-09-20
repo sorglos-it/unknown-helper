@@ -83,11 +83,41 @@ function Test-UwhAdmin {
     $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+# Ein erhoehter Prozess sieht zugeordnete Netzlaufwerke NICHT - die Zuordnung
+# haengt an der Anmeldesitzung, und der Administrator-Token ist eine andere.
+# Darum vor dem Start alles auf den UNC-Pfad umstellen.
+function Resolve-UwhUncPath {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if ($Path -match '^\\') { return $Path }
+    if ($Path -notmatch '^([A-Za-z]):') { return $Path }
+
+    $letter = $Matches[1]
+    try {
+        $drive = Get-PSDrive -Name $letter -ErrorAction Stop
+        if (-not $drive.DisplayRoot) { return $Path }
+
+        # DisplayRoot kommt je nach System mit Null-Zeichen aufgefuellt.
+        $root = ([string]$drive.DisplayRoot).Trim([char]0).Trim()
+        if (-not $root) { return $Path }
+
+        return $root + $Path.Substring(2)
+    } catch {
+        return $Path
+    }
+}
+
+function Test-UwhOnNetworkDrive {
+    $root = Get-UwhRoot
+    if ($root -match '^\\') { return $true }
+    return ((Resolve-UwhUncPath $root) -ne $root)
+}
+
 # Startet uwh erhoeht neu und liefert den Exit-Code des Kindprozesses.
 function Invoke-UwhElevated {
     param([Parameter(Mandatory)][string[]]$Arguments)
 
-    $entry = Get-UwhPath 'uwh.ps1'
+    $entry = Resolve-UwhUncPath (Get-UwhPath 'uwh.ps1')
     $argList = @(
         '-NoProfile'
         '-ExecutionPolicy', 'Bypass'

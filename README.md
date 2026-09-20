@@ -134,6 +134,17 @@ unterbrochener Lauf lässt sich jederzeit von Hand fortsetzen:
 .\uwh.ps1 -Resume <kennung>
 ```
 
+## uwh von einem Netzlaufwerk starten
+
+Geht, braucht aber keinen Handgriff: ein Programm mit Administratorrechten sieht
+**zugeordnete Netzlaufwerke nicht** — die Zuordnung hängt an der Anmeldesitzung,
+und der Administrator-Token ist eine andere. `Z:\...` existiert für ihn schlicht
+nicht.
+
+uwh rechnet den eigenen Pfad deshalb vor jeder Rechteerhöhung und vor jeder
+Neustart-Fortsetzung auf den UNC-Pfad um (`\server\freigabe\...`).
+`.\uwh.ps1 -Doctor` zeigt an, ob das greift.
+
 ## Was uwh nicht macht
 
 - Keine Bloatware-Entfernung, keine Telemetrie-Tweaks. Solche Eingriffe brechen

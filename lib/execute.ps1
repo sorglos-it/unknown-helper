@@ -264,9 +264,10 @@ function Register-UwhResume {
     param([string]$Id)
 
     try {
-        $entry = Get-UwhPath 'uwh.ps1'
+        # Die Aufgabe laeuft erhoeht und sieht deshalb keine Netzlaufwerke.
+        $entry = Resolve-UwhUncPath (Get-UwhPath 'uwh.ps1')
         $argument = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Resume {1} -StateDir "{2}"' -f
-                    $entry, $Id, (Get-UwhStateDir)
+                    $entry, $Id, (Resolve-UwhUncPath (Get-UwhStateDir))
 
         $action = New-ScheduledTaskAction -Execute (Get-UwhPowerShellExe) -Argument $argument
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"

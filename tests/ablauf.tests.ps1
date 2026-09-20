@@ -277,6 +277,23 @@ Test-Case 'Sehr lange Namen brechen die Darstellung nicht' {
 
 # ------------------------------------------------------------------
 
+Test-Case 'Netzlaufwerk wird zum UNC-Pfad aufgeloest' {
+    # Lokale Pfade und UNC-Pfade bleiben unveraendert.
+    Assert-Equal 'C:\Temp\x.ps1' (Resolve-UwhUncPath 'C:\Temp\x.ps1') 'lokaler Pfad'
+    Assert-Equal '\\server\share\x.ps1' (Resolve-UwhUncPath '\\server\share\x.ps1') 'UNC bleibt UNC'
+
+    # Zugeordnete Laufwerke werden ersetzt - mit einem echten, falls vorhanden.
+    $netz = @(Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot }) | Select-Object -First 1
+    if ($netz) {
+        $pfad = "$($netz.Name):\ordner\datei.ps1"
+        $auf = Resolve-UwhUncPath $pfad
+        Assert-True ($auf -ne $pfad) 'Laufwerksbuchstabe ersetzt'
+        Assert-True ($auf.StartsWith('\\')) 'Ergebnis ist ein UNC-Pfad'
+        Assert-True ($auf -notmatch [char]0) 'keine Null-Zeichen im Ergebnis'
+        Assert-True ($auf.EndsWith('\ordner\datei.ps1')) 'Rest des Pfades erhalten'
+    }
+}
+
 Test-Case 'Gefaehrliche Kennungen werden abgelehnt' {
     foreach ($boese in @('--scope machine', 'a b', 'a;b', 'a&b', '', '-x', 'a|b', 'a$b')) {
         if (Test-UwhSafeId $boese) { throw "'$boese' wurde faelschlich zugelassen" }

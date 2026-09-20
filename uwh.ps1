@@ -52,6 +52,10 @@ if ($Doctor) {
     Write-Host ("  Administrator     {0}" -f $(if (Test-UwhAdmin) { 'ja' } else { 'nein' }))
     Write-Host ("  winget            {0}" -f $(if (Test-UwhWinget) { Get-UwhWinget } else { 'FEHLT' }))
     Write-Host ("  Ablage            {0}" -f (Get-UwhStateDir))
+    Write-Host ("  Ordner            {0}" -f (Get-UwhRoot))
+    if (Test-UwhOnNetworkDrive) {
+        Write-Host ("  Netzlaufwerk      ja -> erhoeht wird {0} benutzt" -f (Resolve-UwhUncPath (Get-UwhRoot))) -ForegroundColor Yellow
+    }
     try {
         $cat = Get-UwhCatalog
         Write-Host ("  Katalog           {0} Eintraege, {1} Kategorien" -f $cat.Entries.Count, $cat.Categories.Count)
