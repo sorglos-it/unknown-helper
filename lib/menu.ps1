@@ -5,6 +5,18 @@ Set-StrictMode -Version 2.0
 $script:UwhWidth = 78
 $script:UwhLastHeight = 0
 
+# Die drei Betriebsarten des Menues, in dieser Reihenfolge durchgeschaltet.
+$script:UwhModi = @(
+    [pscustomobject]@{ Name = 'install';   Titel = 'Installieren'; Frage = 'Was soll installiert werden?' }
+    [pscustomobject]@{ Name = 'update';    Titel = 'Aktualisieren'; Frage = 'Was soll aktualisiert werden?' }
+    [pscustomobject]@{ Name = 'uninstall'; Titel = 'Entfernen';     Frage = 'Was soll entfernt werden?' }
+)
+
+function Get-UwhModus {
+    param([int]$Nummer)
+    $script:UwhModi[$Nummer % $script:UwhModi.Count]
+}
+
 # ------------------------------------------------------------------
 # Rahmen zeichnen
 # ------------------------------------------------------------------
@@ -58,9 +70,11 @@ function Get-UwhHeader {
 # ------------------------------------------------------------------
 
 function Build-UwhRows {
-    param($Catalog, [string]$Filter, [hashtable]$Installed)
+    param($Catalog, [string]$Filter, [hashtable]$Installed, [string]$Action = 'install')
 
-    $entries = @(Find-UwhEntries $Catalog $Filter)
+    # Was die Aktion nicht kann, wird gar nicht erst angeboten.
+    $entries = @(Find-UwhEntries $Catalog $Filter |
+                 Where-Object { @($_.Actions | ForEach-Object { $_.Name }) -contains $Action })
     $rows = New-Object System.Collections.Generic.List[object]
 
     foreach ($cat in $Catalog.Categories) {
@@ -114,9 +128,11 @@ function Show-UwhPicker {
     $filter = ''
     $cursor = 0
     $top = 0
+    $modusNr = 0
 
     while ($true) {
-        $rows = Build-UwhRows $Catalog $filter $Installed
+        $modus = Get-UwhModus $modusNr
+        $rows = Build-UwhRows $Catalog $filter $Installed $modus.Name
         $pick = @(Get-UwhPickIndexes $rows)
 
         if ($pick.Count -eq 0) {
@@ -125,7 +141,9 @@ function Show-UwhPicker {
             if ($cursor -lt 0) { $cursor = 0 }
             if ($cursor -ge $pick.Count) { $cursor = $pick.Count - 1 }
 
-            $height = [Math]::Max(5, [Console]::WindowHeight - 11)
+            # Rahmen kostet 12 Zeilen: 5 Kopf + 2 Leerzeilen + 5 Fuss.
+            # Eine bleibt fuer den Zeilenumbruch am Ende.
+            $height = [Math]::Max(5, [Console]::WindowHeight - 13)
             $cursorRow = $pick[$cursor]
             if ($cursorRow -lt $top) { $top = $cursorRow }
             if ($cursorRow -ge $top + $height) { $top = $cursorRow - $height + 1 }
@@ -141,18 +159,19 @@ function Show-UwhPicker {
             $body += New-UwhLine ''
         }
 
-        $sub = if ($filter) { "Suche: $filter" } else { 'Was soll installiert werden?' }
+        $sub = if ($filter) { "Suche: $filter" } else { $modus.Frage }
         $count = $Selection.Keys.Count
         $foot = @(
             (New-UwhRule)
             (New-UwhLine ('  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden'))
-            (New-UwhLine ('  A alle an/aus    P Profil laden                     {0} ausgewaehlt' -f $count))
+            (New-UwhLine ('  A alle an/aus    P Profil laden    M Modus: {0}' -f $modus.Titel.PadRight(14)))
+            (New-UwhLine ('{0}{1} ausgewaehlt' -f (' ' * 58), $count))
             (New-UwhRule)
         )
 
         Write-UwhFrame (@(Get-UwhHeader $sub) + $body + $foot)
 
-        $stand = [pscustomobject]@{ Cursor = $cursor; Filter = $filter }
+        $stand = [pscustomobject]@{ Cursor = $cursor; Filter = $filter; Modus = $modus.Name }
         $folge = Invoke-UwhPickerKey ([Console]::ReadKey($true)) $stand $Selection $rows $pick
         $cursor = $stand.Cursor
         $filter = $stand.Filter
@@ -166,8 +185,22 @@ function Show-UwhPicker {
                 $cursor = 0; $top = 0
             }
             'oben'   { $top = 0 }
+            'modus'  {
+                # Beim Wechsel faengt die Auswahl neu an - sonst waere unklar,
+                # was mit den bereits angehakten Eintraegen passieren soll.
+                $Selection.Clear()
+                $modusNr++
+                $cursor = 0; $top = 0
+            }
         }
     }
+}
+
+# Welche Aktion im gerade eingestellten Modus gemeint ist.
+function Get-UwhStandAktion {
+    param($Stand)
+    if ($Stand.PSObject.Properties['Modus'] -and $Stand.Modus) { return [string]$Stand.Modus }
+    return 'install'
 }
 
 # Was eine Taste bewirkt - ohne Bildschirm und ohne Tastatur, damit pruefbar.
@@ -187,7 +220,7 @@ function Invoke-UwhPickerKey {
             if ($Pick.Count -gt 0) {
                 $e = $Rows[$Pick[$Stand.Cursor]].Entry
                 if ($Selection.Contains($e.Key)) { $Selection.Remove($e.Key) }
-                else { $Selection[$e.Key] = 'install' }
+                else { $Selection[$e.Key] = Get-UwhStandAktion $Stand }
             }
         }
 
@@ -215,10 +248,12 @@ function Invoke-UwhPickerKey {
                 }
                 foreach ($r in $sichtbar) {
                     if ($alleDrin) { $Selection.Remove($r.Entry.Key) }
-                    else { $Selection[$r.Entry.Key] = 'install' }
+                    else { $Selection[$r.Entry.Key] = Get-UwhStandAktion $Stand }
                 }
             } elseif ($c -eq 'p' -or $c -eq 'P') {
                 return 'profil'
+            } elseif ($c -eq 'm' -or $c -eq 'M') {
+                return 'modus'
             }
         }
     }

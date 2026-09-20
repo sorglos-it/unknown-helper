@@ -407,13 +407,13 @@ function Taste {
 }
 
 function Neues-Menue {
-    param([string]$Filter = '')
-    $rows = Build-UwhRows $script:catalog $Filter @{}
+    param([string]$Filter = '', [string]$Modus = 'install')
+    $rows = Build-UwhRows $script:catalog $Filter @{} $Modus
     $pick = @(Get-UwhPickIndexes $rows)
     [pscustomobject]@{
         Rows  = $rows
         Pick  = $pick
-        Stand = [pscustomobject]@{ Cursor = 0; Filter = $Filter }
+        Stand = [pscustomobject]@{ Cursor = 0; Filter = $Filter; Modus = $Modus }
         Wahl  = [ordered]@{}
     }
 }
@@ -525,6 +525,64 @@ Test-Case 'Menue: Schraegstrich und P melden ihre Handlung' {
     Assert-Equal 'suchen' (Druecke $m (Taste 'Oem2' '/')) 'Suche'
     Assert-Equal 'profil' (Druecke $m (Taste 'P' 'p')) 'Profil'
     Assert-Equal 'profil' (Druecke $m (Taste 'P' 'P')) 'auch gross geschrieben'
+}
+
+Test-Case 'Menue: die drei Modi wechseln im Kreis' {
+    Assert-Equal 'install'   (Get-UwhModus 0).Name 'erster'
+    Assert-Equal 'update'    (Get-UwhModus 1).Name 'zweiter'
+    Assert-Equal 'uninstall' (Get-UwhModus 2).Name 'dritter'
+    Assert-Equal 'install'   (Get-UwhModus 3).Name 'wieder von vorn'
+    Assert-Equal 'update'    (Get-UwhModus 7).Name 'auch nach mehreren Runden'
+}
+
+Test-Case 'Menue: M meldet den Moduswechsel' {
+    $m = Neues-Menue
+    Assert-Equal 'modus' (Druecke $m (Taste 'M' 'm')) 'klein geschrieben'
+    Assert-Equal 'modus' (Druecke $m (Taste 'M' 'M')) 'gross geschrieben'
+}
+
+Test-Case 'Menue: jeder Modus zeigt nur, was er auch kann' {
+    $install   = @(Build-UwhRows $script:catalog '' @{} 'install'   | Where-Object { $_.Kind -eq 'entry' })
+    $update    = @(Build-UwhRows $script:catalog '' @{} 'update'    | Where-Object { $_.Kind -eq 'entry' })
+    $uninstall = @(Build-UwhRows $script:catalog '' @{} 'uninstall' | Where-Object { $_.Kind -eq 'entry' })
+
+    Assert-True ($update.Count -lt $install.Count)    'Windows-Funktionen kennen kein Aktualisieren'
+    Assert-True ($uninstall.Count -lt $install.Count) 'eigene Skripte kennen kein Entfernen'
+
+    foreach ($satz in @(@{ A = 'update'; R = $update }, @{ A = 'uninstall'; R = $uninstall })) {
+        foreach ($r in $satz.R) {
+            $kann = @($r.Entry.Actions | ForEach-Object { $_.Name })
+            if ($kann -notcontains $satz.A) {
+                throw "'$($r.Entry.Key)' steht unter '$($satz.A)', kann es aber nicht"
+            }
+        }
+    }
+}
+
+Test-Case 'Menue: die Auswahl merkt sich den eingestellten Modus' {
+    foreach ($modus in @('install', 'update', 'uninstall')) {
+        $m = Neues-Menue '' $modus
+        [void](Druecke $m (Taste 'Spacebar'))
+        $schluessel = @($m.Wahl.Keys)[0]
+        Assert-Equal $modus $m.Wahl[$schluessel] "Leertaste im Modus '$modus'"
+
+        $m2 = Neues-Menue '' $modus
+        [void](Druecke $m2 (Taste 'A' 'a'))
+        $erster = @($m2.Wahl.Keys)[0]
+        Assert-Equal $modus $m2.Wahl[$erster] "Alles-Taste im Modus '$modus'"
+    }
+}
+
+Test-Case 'Menue: aus dem Modus wird die Aktion im Plan' {
+    $m = Neues-Menue '' 'uninstall'
+    [void](Druecke $m (Taste 'Spacebar'))
+
+    $auswahl = @($m.Wahl.Keys | ForEach-Object {
+        [pscustomobject]@{ Key = $_; Action = $m.Wahl[$_]; Answers = @{} }
+    })
+    $plan = New-UwhPlan $script:catalog $auswahl -Unattended $true
+    Assert-Equal 1 $plan.Items.Count 'ein Schritt'
+    Assert-Equal 'uninstall' $plan.Items[0].Action 'Aktion uebernommen'
 }
 
 Test-Case 'Menue: leere Trefferliste bringt nichts durcheinander' {

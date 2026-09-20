@@ -36,7 +36,8 @@ kein git, keine Zusatzmodule.
 |                                                                            |
 +============================================================================+
 |  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden      |
-|  A alle an/aus    P Profil laden                     5 ausgewaehlt         |
+|  A alle an/aus    P Profil laden    M Modus: Installieren                  |
+|                                                          5 ausgewaehlt     |
 +============================================================================+
 ```
 
@@ -48,7 +49,13 @@ kein git, keine Zusatzmodule.
 | `/` | Suchen |
 | `A` | Alles an- oder abwählen |
 | `P` | Gespeichertes Profil laden |
+| `M` | Modus wechseln: Installieren → Aktualisieren → Entfernen |
 | Esc | Suche löschen, sonst beenden |
+
+Der Modus entscheidet, was mit der Auswahl geschieht. Angezeigt wird immer nur,
+was der jeweilige Modus auch kann — Windows-Funktionen lassen sich nicht
+aktualisieren, eigene Skripte nicht entfernen. Ein Moduswechsel setzt die
+Auswahl zurück, damit nie unklar ist, was gleich passiert.
 
 Alle Rückfragen kommen **vor** der Installation. Danach läuft alles ohne
 Unterbrechung durch — auch über einen Neustart hinweg.
