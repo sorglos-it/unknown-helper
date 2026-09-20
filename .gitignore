@@ -1,0 +1,11 @@
+# Eigene Sachen des Anwenders
+custom/profiles/*.yaml
+!custom/profiles/beispiel.yaml
+
+# Laufzeit
+state/
+logs/
+*.log
+
+receipts/
+review-receipts/

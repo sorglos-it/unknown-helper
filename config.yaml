@@ -1,0 +1,478 @@
+# uwh - Katalog
+#
+# Jeder Eintrag beschreibt, WIE etwas installiert wird. Der Weg steht in 'provider':
+#
+#   winget      Paket aus der Windows-Paketquelle          id: Paketkennung
+#   msstore     App aus dem Microsoft Store                id: Paketkennung
+#   feature     Windows-Funktion (Systemsteuerung)         id: Funktionsname
+#   capability  Optionale Windows-Komponente               id: Komponentenname
+#   url         Direkter Download von einer https-Adresse  url:, args:, sha256:
+#   psmodule    PowerShell-Modul                           id: Modulname
+#   script      Eigenes Skript in scripts/                 file: name.ps1
+#
+# Weitere Felder:
+#   name         Anzeigename im Menue
+#   description  Ein kurzer Satz, was es ist
+#   category     Muss unten in 'categories' stehen
+#   scope        machine (Standard) oder user
+#   admin        true/false - sonst wird es aus dem provider abgeleitet
+#   reboot       required, wenn danach ein Neustart noetig ist
+#   recommended  true - im Menue vorausgewaehlt
+#   note         Hinweis, der vor der Ausfuehrung angezeigt wird
+#
+# Eigene Eintraege einfach anhaengen. Pruefen mit:  .\uwh.ps1 -Doctor
+
+categories:
+  - Grundausstattung
+  - Browser
+  - Entwicklung
+  - 3D-Druck und CAD
+  - Medien
+  - Fernzugriff und Netzwerk
+  - Kommunikation
+  - Sicherheit
+  - Windows-Funktionen
+  - Windows-Einstellungen
+
+scripts:
+
+  # ----------------------------------------------------------------
+  # Grundausstattung
+  # ----------------------------------------------------------------
+
+  7zip:
+    name: 7-Zip
+    description: Packt und entpackt Archive
+    category: Grundausstattung
+    provider: winget
+    id: 7zip.7zip
+    recommended: true
+
+  notepadpp:
+    name: Notepad++
+    description: Texteditor
+    category: Grundausstattung
+    provider: winget
+    id: Notepad++.Notepad++
+    recommended: true
+
+  powertoys:
+    name: Microsoft PowerToys
+    description: Zusatzwerkzeuge fuer Windows
+    category: Grundausstattung
+    provider: winget
+    id: Microsoft.PowerToys
+
+  terminal:
+    name: Windows Terminal
+    description: Moderne Eingabeaufforderung
+    category: Grundausstattung
+    provider: winget
+    id: Microsoft.WindowsTerminal
+    recommended: true
+
+  everything:
+    name: Everything
+    description: Findet Dateien sofort
+    category: Grundausstattung
+    provider: winget
+    id: voidtools.Everything
+
+  windirstat:
+    name: WinDirStat
+    description: Zeigt, was den Speicher belegt
+    category: Grundausstattung
+    provider: winget
+    id: WinDirStat.WinDirStat
+
+  rufus:
+    name: Rufus
+    description: Erstellt bootfaehige USB-Sticks
+    category: Grundausstattung
+    provider: winget
+    id: Rufus.Rufus
+
+  # ----------------------------------------------------------------
+  # Browser
+  # ----------------------------------------------------------------
+
+  firefox:
+    name: Mozilla Firefox
+    description: Webbrowser
+    category: Browser
+    provider: winget
+    id: Mozilla.Firefox
+    recommended: true
+
+  chrome:
+    name: Google Chrome
+    description: Webbrowser
+    category: Browser
+    provider: winget
+    id: Google.Chrome
+
+  brave:
+    name: Brave
+    description: Webbrowser mit Werbeblocker
+    category: Browser
+    provider: winget
+    id: Brave.Brave
+
+  # ----------------------------------------------------------------
+  # Entwicklung
+  # ----------------------------------------------------------------
+
+  git:
+    name: Git
+    description: Versionsverwaltung
+    category: Entwicklung
+    provider: winget
+    id: Git.Git
+
+  vscode:
+    name: Visual Studio Code
+    description: Code-Editor
+    category: Entwicklung
+    provider: winget
+    id: Microsoft.VisualStudioCode
+
+  nodejs:
+    name: Node.js LTS
+    description: JavaScript-Laufzeitumgebung
+    category: Entwicklung
+    provider: winget
+    id: OpenJS.NodeJS.LTS
+
+  python:
+    name: Python 3.12
+    description: Programmiersprache
+    category: Entwicklung
+    provider: winget
+    id: Python.Python.3.12
+
+  golang:
+    name: Go
+    description: Programmiersprache
+    category: Entwicklung
+    provider: winget
+    id: GoLang.Go
+
+  rust:
+    name: Rust
+    description: Programmiersprache
+    category: Entwicklung
+    provider: winget
+    id: Rustlang.Rustup
+
+  dotnetsdk:
+    name: .NET SDK 8
+    description: Entwicklungspaket fuer .NET
+    category: Entwicklung
+    provider: winget
+    id: Microsoft.DotNet.SDK.8
+
+  pwsh:
+    name: PowerShell 7
+    description: Aktuelle PowerShell
+    category: Entwicklung
+    provider: winget
+    id: Microsoft.PowerShell
+
+  dockerdesktop:
+    name: Docker Desktop
+    description: Container auf dem Arbeitsplatz
+    category: Entwicklung
+    provider: winget
+    id: Docker.DockerDesktop
+    reboot: required
+    note: Braucht WSL2. Bitte vorher mitauswaehlen.
+
+  # ----------------------------------------------------------------
+  # 3D-Druck und CAD
+  # ----------------------------------------------------------------
+
+  orcaslicer:
+    name: OrcaSlicer
+    description: Slicer fuer 3D-Drucker
+    category: 3D-Druck und CAD
+    provider: winget
+    id: SoftFever.OrcaSlicer
+
+  prusaslicer:
+    name: PrusaSlicer
+    description: Slicer fuer 3D-Drucker
+    category: 3D-Druck und CAD
+    provider: winget
+    id: Prusa3D.PrusaSlicer
+
+  cura:
+    name: Ultimaker Cura
+    description: Slicer fuer 3D-Drucker
+    category: 3D-Druck und CAD
+    provider: winget
+    id: Ultimaker.Cura
+
+  bambustudio:
+    name: Bambu Studio
+    description: Slicer fuer Bambu-Lab-Drucker
+    category: 3D-Druck und CAD
+    provider: winget
+    id: Bambulab.Bambustudio
+
+  freecad:
+    name: FreeCAD
+    description: 3D-Konstruktion
+    category: 3D-Druck und CAD
+    provider: winget
+    id: FreeCAD.FreeCAD
+
+  # ----------------------------------------------------------------
+  # Medien
+  # ----------------------------------------------------------------
+
+  vlc:
+    name: VLC media player
+    description: Spielt so gut wie alles ab
+    category: Medien
+    provider: winget
+    id: VideoLAN.VLC
+    recommended: true
+
+  obs:
+    name: OBS Studio
+    description: Bildschirm aufnehmen, streamen
+    category: Medien
+    provider: winget
+    id: OBSProject.OBSStudio
+
+  audacity:
+    name: Audacity
+    description: Tonaufnahme und -bearbeitung
+    category: Medien
+    provider: winget
+    id: Audacity.Audacity
+
+  gimp:
+    name: GIMP
+    description: Bildbearbeitung
+    category: Medien
+    provider: winget
+    id: GIMP.GIMP
+
+  inkscape:
+    name: Inkscape
+    description: Vektorgrafik
+    category: Medien
+    provider: winget
+    id: Inkscape.Inkscape
+
+  paintnet:
+    name: Paint.NET
+    description: Einfache Bildbearbeitung
+    category: Medien
+    provider: winget
+    id: dotPDN.PaintDotNet
+
+  handbrake:
+    name: HandBrake
+    description: Video umwandeln
+    category: Medien
+    provider: winget
+    id: HandBrake.HandBrake
+
+  # ----------------------------------------------------------------
+  # Fernzugriff und Netzwerk
+  # ----------------------------------------------------------------
+
+  anydesk:
+    name: AnyDesk
+    description: Fernwartung
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: AnyDesk.AnyDesk
+
+  tailscale:
+    name: Tailscale
+    description: Privates Netz uebers Internet
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: Tailscale.Tailscale
+
+  winscp:
+    name: WinSCP
+    description: Dateien per SFTP uebertragen
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: WinSCP.WinSCP
+
+  putty:
+    name: PuTTY
+    description: SSH-Verbindungen
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: PuTTY.PuTTY
+
+  wireshark:
+    name: Wireshark
+    description: Netzwerkverkehr mitlesen
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: WiresharkFoundation.Wireshark
+
+  advancedipscanner:
+    name: Advanced IP Scanner
+    description: Geraete im Netzwerk finden
+    category: Fernzugriff und Netzwerk
+    provider: winget
+    id: Famatech.AdvancedIPScanner
+
+  # ----------------------------------------------------------------
+  # Kommunikation
+  # ----------------------------------------------------------------
+
+  thunderbird:
+    name: Mozilla Thunderbird
+    description: E-Mail-Programm
+    category: Kommunikation
+    provider: winget
+    id: Mozilla.Thunderbird
+
+  discord:
+    name: Discord
+    description: Chat und Sprache
+    category: Kommunikation
+    provider: winget
+    id: Discord.Discord
+
+  telegram:
+    name: Telegram Desktop
+    description: Messenger
+    category: Kommunikation
+    provider: winget
+    id: Telegram.TelegramDesktop
+
+  signal:
+    name: Signal
+    description: Verschluesselter Messenger
+    category: Kommunikation
+    provider: winget
+    id: OpenWhisperSystems.Signal
+
+  # ----------------------------------------------------------------
+  # Sicherheit
+  # ----------------------------------------------------------------
+
+  keepassxc:
+    name: KeePassXC
+    description: Passwoerter lokal verwalten
+    category: Sicherheit
+    provider: winget
+    id: KeePassXCTeam.KeePassXC
+
+  bitwarden:
+    name: Bitwarden
+    description: Passwortverwaltung mit Abgleich
+    category: Sicherheit
+    provider: winget
+    id: Bitwarden.Bitwarden
+
+  veracrypt:
+    name: VeraCrypt
+    description: Datentraeger verschluesseln
+    category: Sicherheit
+    provider: winget
+    id: IDRIX.VeraCrypt
+
+  # ----------------------------------------------------------------
+  # Windows-Funktionen
+  # ----------------------------------------------------------------
+
+  wsl:
+    name: WSL2
+    description: Linux unter Windows
+    category: Windows-Funktionen
+    provider: feature
+    id: Microsoft-Windows-Subsystem-Linux
+    reboot: required
+
+  vmplatform:
+    name: VM-Plattform
+    description: Basis fuer WSL2 und Docker
+    category: Windows-Funktionen
+    provider: feature
+    id: VirtualMachinePlatform
+    reboot: required
+
+  hyperv:
+    name: Hyper-V
+    description: Virtualisierung von Microsoft
+    category: Windows-Funktionen
+    provider: feature
+    id: Microsoft-Hyper-V-All
+    reboot: required
+    note: Nur in Windows Pro und Enterprise verfuegbar.
+
+  netfx3:
+    name: .NET Framework 3.5
+    description: Fuer aeltere Programme
+    category: Windows-Funktionen
+    provider: feature
+    id: NetFx3
+
+  opensshclient:
+    name: OpenSSH-Client
+    description: SSH aus der Eingabeaufforderung
+    category: Windows-Funktionen
+    provider: capability
+    id: OpenSSH.Client~~~~0.0.1.0
+
+  opensshserver:
+    name: OpenSSH-Server
+    description: SSH-Zugang zu diesem Rechner
+    category: Windows-Funktionen
+    provider: capability
+    id: OpenSSH.Server~~~~0.0.1.0
+
+  # ----------------------------------------------------------------
+  # Windows-Einstellungen (eigene Skripte in scripts/)
+  # ----------------------------------------------------------------
+
+  explorer:
+    name: Explorer aufraeumen
+    description: Zeigt Dateiendungen und mehr
+    category: Windows-Einstellungen
+    provider: script
+    file: explorer.ps1
+    admin: false
+    actions:
+      - name: install
+        description: Einstellungen setzen
+        prompts:
+          - question: Dateiendungen immer anzeigen?
+            variable: ENDUNGEN
+            type: yesno
+            default: ja
+          - question: Versteckte Dateien anzeigen?
+            variable: VERSTECKT
+            type: yesno
+            default: nein
+
+  energie:
+    name: Energieplan
+    description: Wann der Rechner schlafen geht
+    category: Windows-Einstellungen
+    provider: script
+    file: energie.ps1
+    admin: true
+    actions:
+      - name: install
+        description: Energieplan setzen
+        prompts:
+          - question: Plan (ausgewogen / hoechstleistung)
+            variable: PLAN
+            type: text
+            default: ausgewogen
+          - question: Bildschirm aus nach wie vielen Minuten? (0 = nie)
+            variable: BILDSCHIRM
+            type: text
+            default: '15'

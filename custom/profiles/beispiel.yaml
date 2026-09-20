@@ -1,0 +1,24 @@
+# Beispielprofil. Abspielen mit:
+#   .\uwh.ps1 -Profile beispiel
+#
+# Ein eigenes Profil entsteht am einfachsten so: im Menue auswaehlen,
+# dann bei "Auswahl vorher als Profil speichern?" mit j bestaetigen.
+
+name: beispiel
+description: Kleine Grundausstattung
+
+select:
+  - 7zip
+  - firefox
+  - notepadpp
+  - vlc
+  - key: explorer
+    action: install
+    answers:
+      ENDUNGEN: ja
+      VERSTECKT: nein
+
+options:
+  unattended: false
+  continue_on_error: true
+  reboot: ask

@@ -1,0 +1,207 @@
+# uwh - unknown windows helper
+
+Software für Windows auswählen, in einem Rutsch installieren und die Auswahl als
+Profil speichern. Beim nächsten Rechner ein Befehl, kein Klick.
+
+Windows-Gegenstück zu [ulh](https://github.com/sorglos-it/ulh).
+
+## Einrichten
+
+PowerShell öffnen und einfügen:
+
+```powershell
+irm https://raw.githubusercontent.com/sorglos-it/uwh/main/install.ps1 | iex
+```
+
+Danach liegt eine Verknüpfung **uwh** auf dem Desktop. Mehr ist nicht nötig —
+kein git, keine Zusatzmodule.
+
+## Bedienen
+
+```
++============================================================================+
+|  uwh - unknown windows helper                                      v0.1.0  |
++============================================================================+
+|  Was soll installiert werden?                                              |
++============================================================================+
+|                                                                            |
+|  GRUNDAUSSTATTUNG                                                          |
+|    [x] 7-Zip                    Packt und entpackt Archive                 |
+|  > [ ] Everything               Findet Dateien sofort                      |
+|    [ ] Microsoft PowerToys      Zusatzwerkzeuge fuer Windows               |
+|    [x] Notepad++                Texteditor                      installiert|
+|    [ ] Rufus                    Erstellt bootfaehige USB-Sticks            |
+|  BROWSER                                                                   |
+|    [x] Mozilla Firefox          Webbrowser                                 |
+|                                                                            |
++============================================================================+
+|  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden      |
+|  A alle an/aus    P Profil laden                     5 ausgewaehlt         |
++============================================================================+
+```
+
+| Taste | Wirkung |
+|---|---|
+| Pfeile | Auf und ab |
+| Leertaste | An- und abwählen |
+| Enter | Weiter zur Zusammenfassung |
+| `/` | Suchen |
+| `A` | Alles an- oder abwählen |
+| `P` | Gespeichertes Profil laden |
+| Esc | Suche löschen, sonst beenden |
+
+Alle Rückfragen kommen **vor** der Installation. Danach läuft alles ohne
+Unterbrechung durch — auch über einen Neustart hinweg.
+
+## Profile
+
+Nach der Auswahl fragt uwh, ob sie als Profil gespeichert werden soll. Das Profil
+merkt sich, **was** installiert wird und **wie** geantwortet wurde.
+
+```powershell
+.\uwh.ps1 -Profile Arbeitsplatz              # mit Zusammenfassung
+.\uwh.ps1 -Profile Arbeitsplatz -Unattended  # ohne jede Rückfrage
+```
+
+Profile liegen als Textdatei in `custom\profiles\` und lassen sich weitergeben.
+Kennwörter werden bewusst **nicht** gespeichert.
+
+## Befehle
+
+```powershell
+.\uwh.ps1                      # Menü
+.\uwh.ps1 -Profile <name>      # Profil abspielen
+.\uwh.ps1 -List                # Katalog anzeigen
+.\uwh.ps1 -Doctor              # Prüfen, ob alles bereit ist
+.\uwh.ps1 -Resume <kennung>    # Unterbrochenen Lauf fortsetzen
+.\uwh.ps1 -NoUpdate            # Ohne Selbstaktualisierung starten
+.\uwh.ps1 -NoScan              # Schneller starten, vorhandene Programme nicht prüfen
+```
+
+## Eigene Programme aufnehmen
+
+Der Katalog ist eine einzige Datei: `config.yaml`. Ein neuer Eintrag ist meist
+sechs Zeilen und kein Code.
+
+```yaml
+  meintool:
+    name: Mein Werkzeug
+    description: Was es macht
+    category: Grundausstattung
+    provider: winget
+    id: Hersteller.Werkzeug
+```
+
+`provider` bestimmt den Installationsweg:
+
+| provider | wofür | Pflichtfeld |
+|---|---|---|
+| `winget` | normale Programme | `id` |
+| `msstore` | Apps aus dem Microsoft Store | `id` |
+| `feature` | Windows-Funktionen (WSL2, Hyper-V) | `id` |
+| `capability` | optionale Komponenten (OpenSSH) | `id` |
+| `url` | direkter Download | `url`, `args`, `sha256` |
+| `psmodule` | PowerShell-Module | `id` |
+| `script` | eigenes Skript in `scripts\` | `file` |
+
+Für alles, was sich nicht deklarieren lässt, gibt es `provider: script`. Vorlage:
+[`scripts\_template.ps1`](scripts/_template.ps1). Fragen gehören dabei immer in
+`config.yaml`, nicht ins Skript — nur so kann uwh sie vorab sammeln und in
+Profilen speichern.
+
+Danach prüfen — **beides**, der zweite Schritt ist der wichtige:
+
+```powershell
+.\uwh.ps1 -Doctor
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
+```
+
+`-Doctor` prüft den Aufbau des Katalogs, `kennungen.tests.ps1` prüft, ob es jedes
+Paket wirklich gibt. Paketkennungen veralten: Hersteller benennen um, Pakete
+verschwinden aus der Quelle. Beim Aufbau dieses Katalogs waren 5 von 46
+selbstgeschriebenen Kennungen falsch — geraten wird hier nichts.
+
+## Neustarts
+
+Windows-Funktionen wie WSL2 verlangen einen Neustart. uwh merkt sich den Stand,
+legt eine Aufgabe für die Anmeldung an und macht danach allein weiter. Ein
+unterbrochener Lauf lässt sich jederzeit von Hand fortsetzen:
+
+```powershell
+.\uwh.ps1 -Resume <kennung>
+```
+
+## Was uwh nicht macht
+
+- Keine Bloatware-Entfernung, keine Telemetrie-Tweaks. Solche Eingriffe brechen
+  bei jedem Windows-Update und gehören nicht in ein Installationswerkzeug.
+- Kein Chocolatey und kein Scoop parallel zu winget. Ein Paketmanager, ein
+  Zustand, keine doppelt installierten Programme.
+
+## Voraussetzungen
+
+- Windows 10 (ab 1709) oder Windows 11
+- Windows PowerShell 5.1 (ist ab Werk dabei)
+- winget — bei Windows 11 dabei, bei Windows 10 als **App Installer** im Store
+
+`.\uwh.ps1 -Doctor` sagt, ob etwas fehlt.
+
+## Wenn PowerShell die Ausführung verweigert
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\uwh.ps1
+```
+
+Die Desktop-Verknüpfung macht das bereits von selbst.
+
+## Aufbau
+
+```
+uwh.ps1              Einstieg
+install.ps1          Einrichtung per Einzeiler
+config.yaml          Katalog - hier kommen eigene Programme rein
+VERSION              Versionsnummer, steuert die Selbstaktualisierung
+lib\                 Programmteile
+  core.ps1             Ausgabe, Rechte, Prüfungen
+  yaml.ps1             YAML lesen und schreiben
+  catalog.ps1          Katalog einlesen und prüfen
+  providers.ps1        die Installationswege
+  menu.ps1             Menü und Abfragen
+  execute.ps1          Ablauf, Neustart, Protokoll
+  profiles.ps1         Profile
+  update.ps1           Selbstaktualisierung
+scripts\             eigene Skripte (provider: script)
+custom\profiles\     gespeicherte Profile
+tests\               Tests
+```
+
+Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
+
+## Tests
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests\yaml.tests.ps1
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
+```
+
+| Datei | prüft | braucht |
+|---|---|---|
+| `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
+| `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung | nichts |
+| `kennungen.tests.ps1` | ob es jedes Paket wirklich gibt | winget, Internet; Windows-Einträge zusätzlich Administratorrechte |
+
+Die ersten beiden installieren nichts und ändern nichts am System.
+
+## Lizenz
+
+MIT
