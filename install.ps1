@@ -49,15 +49,24 @@ try {
 
     if (-not (Test-Path $Ziel)) { New-Item -ItemType Directory -Path $Ziel -Force | Out-Null }
 
-    foreach ($item in Get-ChildItem -LiteralPath $quelle.FullName) {
-        # Eigene Profile und Skripte bleiben bei einer Neuinstallation erhalten.
-        if ($item.Name -eq 'custom' -and (Test-Path (Join-Path $Ziel 'custom'))) { continue }
-        if ($item.PSIsContainer) {
-            Copy-Item -LiteralPath $item.FullName -Destination $Ziel -Recurse -Force
-        } else {
-            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $Ziel $item.Name) -Force
+    # Vorhandene Profile bleiben bei einer Neuinstallation erhalten.
+    $auslassen = @()
+    if (Test-Path (Join-Path $Ziel 'custom')) { $auslassen = @('custom') }
+
+    # Copy-Item -Recurse wuerde einen vorhandenen Zielordner verschachteln.
+    function Kopiere-Baum {
+        param([string]$Von, [string]$Nach, [string[]]$Aus = @())
+        if (-not (Test-Path -LiteralPath $Nach)) {
+            New-Item -ItemType Directory -Path $Nach -Force | Out-Null
+        }
+        foreach ($i in Get-ChildItem -LiteralPath $Von -Force) {
+            if ($Aus -contains $i.Name) { continue }
+            $z = Join-Path $Nach $i.Name
+            if ($i.PSIsContainer) { Kopiere-Baum $i.FullName $z } 
+            else { Copy-Item -LiteralPath $i.FullName -Destination $z -Force }
         }
     }
+    Kopiere-Baum $quelle.FullName $Ziel $auslassen
 
     Write-Host "  Eingerichtet unter: $Ziel" -ForegroundColor Green
 

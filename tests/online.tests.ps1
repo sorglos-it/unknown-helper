@@ -1,7 +1,8 @@
-﻿# Prueft, ob es jede Paketkennung aus config.yaml wirklich gibt.
-# Braucht winget und Internet und dauert ein bis zwei Minuten.
+﻿# Pruefungen, die Internet brauchen: gibt es jede Paketkennung aus
+# config.yaml wirklich, und haelt der Direkt-Download seine Zusagen.
+# Dauert ein bis zwei Minuten.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
+# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 #
 # Immer laufen lassen, wenn dem Katalog etwas hinzugefuegt wurde.
 # Paketkennungen aendern sich: Hersteller benennen um, Pakete verschwinden.
@@ -11,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 foreach ($lib in @('core', 'yaml', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+Set-UwhLogFile (Join-Path $env:TEMP 'uwh-online.log')
 
 $exe = Get-UwhWinget
 if (-not $exe) {
@@ -71,16 +73,66 @@ if (-not (Test-UwhAdmin)) {
     }
 }
 
+# ------------------------------------------------------------------
+# Direkt-Download: die Pruefsumme muss halten, was sie verspricht
+# ------------------------------------------------------------------
+
+Write-Host ''
+Write-Host 'Direkt-Download' -ForegroundColor Cyan
+
+function Neuer-UrlEintrag {
+    param([string]$Url, [string]$Sha256)
+    [pscustomobject]@{
+        Key = 'test'; Name = 'Test'; Description = ''; Category = ''
+        Provider = 'url'; Id = ''; Scope = 'machine'
+        Url = $Url; Sha256 = $Sha256; SilentArgs = '/S'; File = ''
+        BaseDir = $root; Actions = @(); Admin = $true
+        Reboot = ''; Recommended = $false; Note = ''
+    }
+}
+
+function Pruefe {
+    param([string]$Name, [bool]$Erfuellt, [string]$Erhalten)
+    if ($Erfuellt) {
+        Write-Host ("  ok    {0}" -f $Name) -ForegroundColor DarkGreen
+    } else {
+        $fehler.Add("$Name - erhalten: $Erhalten")
+        Write-Host ("  FEHL  {0}" -f $Name) -ForegroundColor Red
+    }
+}
+
+$vorher = @(Get-ChildItem -Path $env:TEMP -Filter 'uwh-*' -File -ErrorAction SilentlyContinue).Count
+
+# Falsche Pruefsumme: Ablehnung, BEVOR irgendetwas ausgefuehrt wird.
+$r = Invoke-UwhUrl (Neuer-UrlEintrag 'https://example.com/' ('0' * 64)) 'install'
+Pruefe 'Falsche Pruefsumme wird abgelehnt' `
+       ($r.Status -eq 'fehler' -and $r.Message -like '*Pruefsumme*') "$($r.Status) / $($r.Message)"
+
+# Unerreichbare Adresse: sauberer Fehler statt Absturz.
+$r2 = Invoke-UwhUrl (Neuer-UrlEintrag 'https://gibtesnicht.invalid/setup.exe' '') 'install'
+Pruefe 'Unerreichbare Adresse meldet einen Fehler' ($r2.Status -eq 'fehler') $r2.Status
+
+# Kein https: es darf gar nicht erst geladen werden.
+$r3 = Invoke-UwhUrl (Neuer-UrlEintrag 'http://example.com/setup.exe' '') 'install'
+Pruefe 'Ohne https wird nichts geladen' `
+       ($r3.Status -eq 'fehler' -and $r3.Message -like '*https*') "$($r3.Status) / $($r3.Message)"
+
+# Nichts darf im Zwischenspeicher liegenbleiben.
+$nachher = @(Get-ChildItem -Path $env:TEMP -Filter 'uwh-*' -File -ErrorAction SilentlyContinue).Count
+Pruefe 'Keine Datei im Zwischenspeicher zurueckgelassen' ($nachher -le $vorher) "$vorher -> $nachher"
+
+# ------------------------------------------------------------------
+
 Write-Host ''
 if ($fehler.Count -gt 0) {
-    Write-Host '  Zu berichtigen in config.yaml:' -ForegroundColor Yellow
+    Write-Host '  Nicht in Ordnung:' -ForegroundColor Yellow
     foreach ($f in $fehler) { Write-Host "    - $f" -ForegroundColor DarkGray }
     Write-Host ''
-    Write-Host '  Richtige Kennung finden mit:  winget search <name>' -ForegroundColor DarkGray
+    Write-Host '  Richtige Paketkennung finden mit:  winget search <name>' -ForegroundColor DarkGray
     Write-Host ''
     exit 1
 }
 
-Write-Host '  Alle Kennungen in Ordnung.' -ForegroundColor Green
+Write-Host '  Alles in Ordnung.' -ForegroundColor Green
 Write-Host ''
 exit 0

@@ -30,6 +30,34 @@ function Test-UwhNewer {
     }
 }
 
+# Kopiert den Inhalt von Quelle nach Ziel und laesst 'custom' in Ruhe.
+#
+# Copy-Item -Recurse auf einen VORHANDENEN Zielordner legt ihn verschachtelt
+# an ('lib\lib') statt zusammenzufuehren. Deshalb wird hier Datei fuer Datei
+# gegangen und jeder Ordner ausdruecklich angelegt.
+function Copy-UwhTree {
+    param(
+        [Parameter(Mandatory)][string]$Source,
+        [Parameter(Mandatory)][string]$Target,
+        [string[]]$Skip = @('custom')
+    )
+
+    if (-not (Test-Path -LiteralPath $Target)) {
+        New-Item -ItemType Directory -Path $Target -Force | Out-Null
+    }
+
+    foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
+        if ($Skip -contains $item.Name) { continue }
+        $ziel = Join-Path $Target $item.Name
+
+        if ($item.PSIsContainer) {
+            Copy-UwhTree $item.FullName $ziel @()
+        } else {
+            Copy-Item -LiteralPath $item.FullName -Destination $ziel -Force
+        }
+    }
+}
+
 # Liefert $true, wenn aktualisiert wurde und neu gestartet werden soll.
 function Update-Uwh {
     param([switch]$Quiet)
@@ -54,17 +82,7 @@ function Update-Uwh {
         $source = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
         if (-not $source) { throw 'Archiv ist leer.' }
 
-        $root = Get-UwhRoot
-        foreach ($item in Get-ChildItem -LiteralPath $source.FullName) {
-            # 'custom' gehoert dem Anwender und bleibt unangetastet.
-            if ($item.Name -eq 'custom') { continue }
-            $target = Join-Path $root $item.Name
-            if ($item.PSIsContainer) {
-                Copy-Item -LiteralPath $item.FullName -Destination $root -Recurse -Force
-            } else {
-                Copy-Item -LiteralPath $item.FullName -Destination $target -Force
-            }
-        }
+        Copy-UwhTree $source.FullName (Get-UwhRoot)
 
         if (-not $Quiet) { Write-UwhOk "Auf Version $remote aktualisiert." }
         return $true

@@ -122,10 +122,10 @@ Danach prüfen — **beides**, der zweite Schritt ist der wichtige:
 ```
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
+powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 ```
 
-`-Doctor` prüft den Aufbau des Katalogs, `kennungen.tests.ps1` prüft, ob es jedes
+`-Doctor` prüft den Aufbau des Katalogs, `online.tests.ps1` prüft, ob es jedes
 Paket wirklich gibt. Paketkennungen veralten: Hersteller benennen um, Pakete
 verschwinden aus der Quelle. Beim Aufbau dieses Katalogs waren 5 von 46
 selbstgeschriebenen Kennungen falsch — geraten wird hier nichts.
@@ -192,7 +192,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (4 Dateien, 54 Prüfungen)
+tests\               Tests (4 Dateien, 59 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
@@ -212,15 +212,15 @@ powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
 ```
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tests\kennungen.tests.ps1
+powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 ```
 
 | Datei | prüft | braucht |
 |---|---|---|
 | `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
-| `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung | nichts |
+| `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung, Selbstaktualisierung | nichts |
 | `fortsetzen.tests.ps1` | eigene Skripte, Neustart-Entscheidung, Fortsetzen | nichts |
-| `kennungen.tests.ps1` | ob es jedes Paket wirklich gibt | winget, Internet; Windows-Einträge zusätzlich Administratorrechte |
+| `online.tests.ps1` | ob es jedes Paket wirklich gibt, und ob der Direkt-Download Prüfsumme und https durchsetzt | Internet, winget; Windows-Einträge zusätzlich Administratorrechte |
 
 Die ersten drei installieren nichts, ändern nichts am System und starten nichts
 neu — der Neustart wird durch eine Attrappe ersetzt, alles davor und danach

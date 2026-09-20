@@ -277,6 +277,64 @@ Test-Case 'Sehr lange Namen brechen die Darstellung nicht' {
 
 # ------------------------------------------------------------------
 
+Test-Case 'Versionsvergleich fuer die Selbstaktualisierung' {
+    Assert-True (Test-UwhNewer '0.2.0' '0.1.0')      'neuer wird erkannt'
+    Assert-True (Test-UwhNewer '1.0.0' '0.9.9')      'Hauptnummer zaehlt'
+    Assert-True (Test-UwhNewer '0.1.10' '0.1.9')     'wird als Zahl verglichen, nicht als Text'
+    Assert-True (-not (Test-UwhNewer '0.1.0' '0.1.0')) 'gleich ist kein Update'
+    Assert-True (-not (Test-UwhNewer '0.1.0' '0.2.0')) 'aelter ist kein Update'
+}
+
+Test-Case 'Unbrauchbare Versionsangabe loest kein Update aus' {
+    # Eine kaputte Antwort vom Server darf nicht in einer Schleife enden.
+    foreach ($murks in @('kaputt', '', '   ', '<html>404</html>', 'v1.0')) {
+        if (Test-UwhNewer $murks '0.1.0') { throw "'$murks' hat ein Update ausgeloest" }
+    }
+}
+
+Test-Case 'Die eigene VERSION ist lesbar und gueltig' {
+    $v = Get-UwhLocalVersion
+    Assert-True ($v -match '^\d+\.\d+\.\d+$') "VERSION ist '$v', erwartet wird z.B. 0.1.0"
+    Assert-True ($v -eq $v.Trim()) 'keine Leerzeichen drumherum'
+    Assert-True (Test-UwhNewer '99.0.0' $v) 'laesst sich vergleichen'
+}
+
+Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
+    $quelle = Join-Path $sandkasten 'neu'
+    $ziel   = Join-Path $sandkasten 'alt'
+
+    # So sieht ein frisch entpacktes Archiv aus.
+    New-Item -ItemType Directory -Path (Join-Path $quelle 'lib') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $quelle 'scripts') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $quelle 'custom\profiles') -Force | Out-Null
+    Set-Content (Join-Path $quelle 'VERSION')            '9.9.9'      -Encoding UTF8
+    Set-Content (Join-Path $quelle 'uwh.ps1')            'neu'        -Encoding UTF8
+    Set-Content (Join-Path $quelle 'lib\core.ps1')        'neu'        -Encoding UTF8
+    Set-Content (Join-Path $quelle 'lib\dazu.ps1')        'dazu'       -Encoding UTF8
+    Set-Content (Join-Path $quelle 'scripts\a.ps1')       'neu'        -Encoding UTF8
+    Set-Content (Join-Path $quelle 'custom\profiles\x.yaml') 'aus-archiv' -Encoding UTF8
+
+    # So sieht die vorhandene Installation aus.
+    New-Item -ItemType Directory -Path (Join-Path $ziel 'lib') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $ziel 'custom\profiles') -Force | Out-Null
+    Set-Content (Join-Path $ziel 'VERSION')                 '0.1.0'  -Encoding UTF8
+    Set-Content (Join-Path $ziel 'uwh.ps1')                 'alt'    -Encoding UTF8
+    Set-Content (Join-Path $ziel 'lib\core.ps1')             'alt'    -Encoding UTF8
+    Set-Content (Join-Path $ziel 'custom\profiles\meins.yaml') 'meins'  -Encoding UTF8
+
+    Copy-UwhTree $quelle $ziel
+
+    Assert-True (-not (Test-Path (Join-Path $ziel 'lib\lib'))) 'kein verschachtelter lib-Ordner'
+    Assert-Equal 'neu'   (Get-Content (Join-Path $ziel 'lib\core.ps1') -Raw).Trim()  'Datei ersetzt'
+    Assert-Equal 'dazu'  (Get-Content (Join-Path $ziel 'lib\dazu.ps1') -Raw).Trim()  'neue Datei dazugekommen'
+    Assert-Equal '9.9.9' (Get-Content (Join-Path $ziel 'VERSION') -Raw).Trim()      'VERSION ersetzt'
+    Assert-True (Test-Path (Join-Path $ziel 'scripts\a.ps1')) 'fehlender Ordner angelegt'
+
+    # Das Wichtigste: eigene Profile ueberleben die Aktualisierung.
+    Assert-Equal 'meins' (Get-Content (Join-Path $ziel 'custom\profiles\meins.yaml') -Raw).Trim() 'eigenes Profil unberuehrt'
+    Assert-True (-not (Test-Path (Join-Path $ziel 'custom\profiles\x.yaml'))) 'custom aus dem Archiv nicht uebernommen'
+}
+
 Test-Case 'Netzlaufwerk wird zum UNC-Pfad aufgeloest' {
     # Lokale Pfade und UNC-Pfade bleiben unveraendert.
     Assert-Equal 'C:\Temp\x.ps1' (Resolve-UwhUncPath 'C:\Temp\x.ps1') 'lokaler Pfad'
