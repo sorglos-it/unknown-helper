@@ -34,6 +34,45 @@ try {
         [Net.SecurityProtocolType]::Tls12 -bor [Net.SecurityProtocolType]::Tls11
 } catch { }
 
+# Aus einer technischen Meldung etwas machen, mit dem man etwas anfangen kann.
+function Get-Klartext {
+    param($Fehler)
+
+    $text = [string]$Fehler.Exception.Message
+    $status = ''
+    if ($Fehler.Exception -is [Net.WebException] -and $Fehler.Exception.Response) {
+        $status = [string][int]$Fehler.Exception.Response.StatusCode
+    }
+
+    if ($status -eq '404' -or $text -match '\(404\)') {
+        return @(
+            'uwh wurde unter der angegebenen Adresse nicht gefunden.'
+            'Moegliche Ursachen:'
+            '  - das Repository ist (noch) nicht oeffentlich'
+            '  - die Adresse im Skript stimmt nicht mehr'
+        )
+    }
+    if ($status -eq '403' -or $status -eq '401') {
+        return @('Der Zugriff wurde verweigert. Das Repository ist vermutlich nicht oeffentlich.')
+    }
+    if ($text -match 'Remotename|remote name|NameResolution|konnte nicht aufgel') {
+        return @('Keine Verbindung zum Internet, oder der Server ist nicht erreichbar.')
+    }
+    if ($text -match 'SSL|TLS|Vertrauensstellung|trust relationship') {
+        return @(
+            'Die gesicherte Verbindung kam nicht zustande.'
+            'Meist liegt das an einer Firewall oder an einem Virenscanner, der mitliest.'
+        )
+    }
+    if ($text -match 'Zugriff verweigert|Access to the path|UnauthorizedAccess') {
+        return @(
+            'Es durfte nicht in den Zielordner geschrieben werden.'
+            'Laeuft uwh gerade? Dann bitte erst schliessen.'
+        )
+    }
+    return @('Bitte Internetverbindung pruefen und es noch einmal versuchen.')
+}
+
 $tmp = Join-Path $env:TEMP ('uwh-setup-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
 $zipFile = "$tmp.zip"
 
@@ -98,7 +137,11 @@ try {
     }
 } catch {
     Write-Host ''
-    Write-Host "  Einrichtung fehlgeschlagen: $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "  Einrichtung fehlgeschlagen." -ForegroundColor Red
+    Write-Host ''
+    foreach ($zeile in (Get-Klartext $_)) { Write-Host "  $zeile" -ForegroundColor Yellow }
+    Write-Host ''
+    Write-Host "  Technische Meldung: $($_.Exception.Message)" -ForegroundColor DarkGray
     Write-Host ''
     exit 1
 } finally {

@@ -36,6 +36,16 @@ Initialize-UwhConsole
 Initialize-UwhTls
 if ($StateDir) { Set-UwhStateDir $StateDir }
 
+# Sicherheitsnetz: Anwender bekommen eine Meldung, keinen Stapelabzug.
+# Die technischen Einzelheiten stehen im Protokoll.
+trap {
+    Write-Host ''
+    Write-UwhErr $_.Exception.Message
+    Write-UwhLog 'TRAP' ("{0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace)
+    Write-Host ''
+    exit 1
+}
+
 # ------------------------------------------------------------------
 # Kleine Betriebsarten
 # ------------------------------------------------------------------
@@ -170,7 +180,23 @@ if ($catalog.Problems.Count -gt 0) {
 }
 
 if ($ProfileName) {
-    $prof = Import-UwhProfile $ProfileName
+    try {
+        $prof = Import-UwhProfile $ProfileName
+    } catch {
+        Write-Host ''
+        Write-UwhErr $_.Exception.Message
+        $vorhanden = @(Get-UwhProfileNames)
+        Write-Host ''
+        if ($vorhanden.Count -gt 0) {
+            Write-Host '  Vorhandene Profile:' -ForegroundColor DarkGray
+            foreach ($n in $vorhanden) { Write-Host "    $n" -ForegroundColor DarkGray }
+        } else {
+            Write-Host '  Es gibt noch kein Profil. Eines entsteht im Menue:' -ForegroundColor DarkGray
+            Write-Host '  auswaehlen, dann "Auswahl vorher als Profil speichern?" mit j bestaetigen.' -ForegroundColor DarkGray
+        }
+        Write-Host ''
+        exit 2
+    }
     $unattended = $Unattended -or [bool]$prof.Options['unattended']
 
     $plan = New-UwhPlan $catalog $prof.Select `

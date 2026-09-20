@@ -398,6 +398,53 @@ Test-Case 'Katalog lehnt einen Eintrag mit Schadkennung ab' {
 }
 
 # ------------------------------------------------------------------
+# Der tatsaechliche Aufruf, nicht nur die Funktionen dahinter
+# ------------------------------------------------------------------
+
+function Rufe-Uwh {
+    param([string[]]$Argumente)
+    $exe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+    $datei = Join-Path $env:TEMP ('uwh-cli-{0}.txt' -f [guid]::NewGuid().ToString('N').Substring(0, 6))
+    try {
+        $p = Start-Process -FilePath $exe -Wait -PassThru -NoNewWindow `
+             -RedirectStandardOutput $datei `
+             -ArgumentList (@('-NoProfile', '-ExecutionPolicy', 'Bypass',
+                              '-File', (Join-Path $root 'uwh.ps1'), '-NoUpdate') + $Argumente)
+        $text = if (Test-Path $datei) { Get-Content -LiteralPath $datei -Raw } else { '' }
+        return [pscustomobject]@{ Code = $p.ExitCode; Text = [string]$text }
+    } finally {
+        Remove-Item -LiteralPath $datei -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Test-Case 'Aufruf: -Version nennt die Version' {
+    $r = Rufe-Uwh @('-Version')
+    Assert-Equal 0 $r.Code 'Rueckgabewert'
+    Assert-True ($r.Text -match 'uwh \d+\.\d+\.\d+') "Ausgabe war '$($r.Text.Trim())'"
+}
+
+Test-Case 'Aufruf: -List zeigt den Katalog' {
+    $r = Rufe-Uwh @('-List')
+    Assert-Equal 0 $r.Code 'Rueckgabewert'
+    Assert-True ($r.Text -like '*7zip*')            'ein bekannter Eintrag kommt vor'
+    Assert-True ($r.Text -like '*Grundausstattung*') 'eine Kategorie kommt vor'
+}
+
+Test-Case 'Aufruf: unbekanntes Profil endet freundlich' {
+    $r = Rufe-Uwh @('-Profile', 'gibtsganzsicherniocht', '-Unattended')
+    Assert-Equal 2 $r.Code 'eigener Rueckgabewert, nicht 0'
+    Assert-True ($r.Text -like '*gibt es nicht*')   'sagt, was los ist'
+    Assert-True ($r.Text -notlike '*CategoryInfo*') 'kein Stapelabzug'
+    Assert-True ($r.Text -notlike '*Zeichen:*')     'keine Zeilenangabe aus PowerShell'
+}
+
+Test-Case 'Aufruf: -Resume mit unbekannter Kennung endet freundlich' {
+    $r = Rufe-Uwh @('-Resume', 'abc123')
+    Assert-Equal 2 $r.Code 'eigener Rueckgabewert'
+    Assert-True ($r.Text -notlike '*CategoryInfo*') 'kein Stapelabzug'
+}
+
+# ------------------------------------------------------------------
 
 Remove-Item -LiteralPath $sandkasten -Recurse -Force -ErrorAction SilentlyContinue
 

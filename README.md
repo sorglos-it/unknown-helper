@@ -192,7 +192,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (4 Dateien, 59 ohne Systemzugriff)
+tests\               Tests (4 Dateien, 63 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.
@@ -218,7 +218,7 @@ powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 | Datei | prüft | braucht |
 |---|---|---|
 | `yaml.tests.ps1` | YAML lesen und schreiben | nichts |
-| `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung, Selbstaktualisierung | nichts |
+| `ablauf.tests.ps1` | Katalog, Profile, Plan, Ablauf, Menü, Eingabeprüfung, Selbstaktualisierung, Aufruf über die Befehlszeile | nichts |
 | `fortsetzen.tests.ps1` | eigene Skripte, Neustart-Entscheidung, Fortsetzen | nichts |
 | `online.tests.ps1` | ob es jedes Paket wirklich gibt, und ob der Direkt-Download Prüfsumme und https durchsetzt | Internet, winget; Windows-Einträge zusätzlich Administratorrechte |
 
