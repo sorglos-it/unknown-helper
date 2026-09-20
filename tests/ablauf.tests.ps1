@@ -213,6 +213,69 @@ Test-Case 'Kennwoerter landen nicht im Profil' {
     }
 }
 
+Test-Case 'Der Katalog entscheidet, was geheim ist' {
+    $datei = Join-Path $sandkasten 'geheim.yaml'
+    New-Item -ItemType Directory -Path $sandkasten -Force | Out-Null
+    Set-Content -LiteralPath $datei -Encoding UTF8 -Value @(
+        'categories:'
+        '  - Test'
+        'scripts:'
+        '  zugang:'
+        '    name: Zugang'
+        '    description: Test'
+        '    category: Test'
+        '    provider: script'
+        '    file: _template.ps1'
+        '    admin: false'
+        '    actions:'
+        '      - name: install'
+        '        prompts:'
+        '          - question: Benutzer?'
+        '            variable: BENUTZER'
+        '            type: text'
+        '          - question: Zugangsdaten?'
+        '            variable: ZUGANG'
+        '            type: secret'
+        '          - question: Kennwort?'
+        '            variable: PASSWORT'
+        '            type: text'
+    )
+    $c = Get-UwhCatalog $datei
+    $e = Get-UwhEntry $c 'zugang'
+
+    Assert-True (Test-UwhGeheim 'ZUGANG' $e 'install')          'type secret zaehlt, auch bei harmlosem Namen'
+    Assert-True (-not (Test-UwhGeheim 'BENUTZER' $e 'install')) 'type text bleibt sichtbar'
+    Assert-True (Test-UwhGeheim 'PASSWORT' $e 'install')        'falscher Typ im Katalog hebt den Schutz nicht auf'
+}
+
+Test-Case 'Der Namensfilter faengt ab, was der Katalog nicht kennt' {
+    foreach ($n in @('PASSWORT', 'PWD', 'KENNWORT', 'API_KEY', 'SECRET_X',
+                     'ACCESS_TOKEN', 'CREDENTIAL', 'LIZENZSCHLUESSEL', 'GEHEIM', 'PIN')) {
+        if (-not (Test-UwhGeheim $n $null 'install')) { throw "'$n' wurde nicht als geheim erkannt" }
+    }
+    foreach ($n in @('BENUTZER', 'DOMAIN', 'ZIELPFAD', 'PORT', 'GIT_USER', 'GIT_EMAIL')) {
+        if (Test-UwhGeheim $n $null 'install') { throw "'$n' wurde faelschlich als geheim behandelt" }
+    }
+}
+
+Test-Case 'Eine als geheim erklaerte Antwort landet nicht im Profil' {
+    $datei = Join-Path $sandkasten 'geheim.yaml'
+    $c = Get-UwhCatalog $datei
+    $items = @([pscustomobject]@{
+        Key = 'zugang'; Action = 'install'
+        Answers = @{ BENUTZER = 'thomas'; ZUGANG = 'Xr7pQz'; PASSWORT = 'Vb31Kd' }
+    })
+    $pfad = Save-UwhProfile 'testkatalog' $items $c
+    try {
+        $text = Get-Content -LiteralPath $pfad -Raw
+        Assert-True ($text -notmatch 'Xr7pQz') 'geheime Antwort nicht enthalten'
+        Assert-True ($text -notmatch 'Vb31Kd') 'Kennwort nicht enthalten'
+        Assert-True ($text -match 'thomas')    'harmlose Antwort enthalten'
+    } finally {
+        Remove-Item -LiteralPath $pfad -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Test-Case 'Profil mit Kreisbezug wird erkannt' {
     Export-UwhYaml ([ordered]@{ name = 'a'; extends = 'testb'; select = @('7zip') }) (Get-UwhProfileFile 'testa')
     Export-UwhYaml ([ordered]@{ name = 'b'; extends = 'testa'; select = @('vlc')  }) (Get-UwhProfileFile 'testb')

@@ -96,10 +96,35 @@ function ConvertTo-UwhProfileItem {
 # Schreiben
 # ------------------------------------------------------------------
 
+# Antworten, die nicht in eine weitergebbare Datei gehoeren.
+#
+# Massgeblich ist 'type: secret' aus config.yaml - das ist eine Ansage des
+# Katalogs, kein Raten. Der Namensfilter kommt nur zusaetzlich dazu, fuer
+# Eintraege, bei denen der Typ vergessen wurde. Er darf grosszuegig sein:
+# eine Antwort zu viel nicht zu speichern kostet eine Nachfrage, eine
+# Antwort zu wenig zu verschweigen gibt ein Kennwort weiter.
+function Test-UwhGeheim {
+    param([string]$Variable, $Entry, [string]$Action)
+
+    # Der Katalog kann Geheimhaltung nur hinzufuegen, nie aufheben: steht dort
+    # versehentlich 'type: text' bei einem Kennwort, greift der Namensfilter.
+    if ($Entry) {
+        $a = Get-UwhAction $Entry $Action
+        if ($a) {
+            foreach ($p in $a.Prompts) {
+                if ($p.Variable -eq $Variable -and $p.Type -eq 'secret') { return $true }
+            }
+        }
+    }
+
+    return ($Variable -match '(?i)(pass|pwd|kennwort|secret|token|credential|geheim|schluessel)|key$|pin$')
+}
+
 function Save-UwhProfile {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)]$Items,
+        $Catalog,
         [hashtable]$Options = @{}
     )
 
@@ -108,9 +133,11 @@ function Save-UwhProfile {
     $select = New-Object System.Collections.Generic.List[object]
     foreach ($item in $Items) {
         $answers = ConvertTo-UwhHashtable $item.Answers
+        $entry = if ($Catalog) { Get-UwhEntry $Catalog $item.Key } else { $null }
+
         $secretFree = [ordered]@{}
         foreach ($k in ($answers.Keys | Sort-Object)) {
-            if ($k -match '(?i)pass|kennwort|secret|token|key$') { continue }
+            if (Test-UwhGeheim $k $entry $item.Action) { continue }
             $secretFree[$k] = [string]$answers[$k]
         }
 

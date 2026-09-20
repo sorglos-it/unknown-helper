@@ -78,7 +78,11 @@ merkt sich, **was** installiert wird und **wie** geantwortet wurde.
 ```
 
 Profile liegen als Textdatei in `custom\profiles\` und lassen sich weitergeben.
-Kennwörter werden bewusst **nicht** gespeichert.
+**Kennwörter werden nicht gespeichert.** Maßgeblich ist `type: secret` in
+`config.yaml` — das ist eine Ansage des Katalogs, kein Raten. Zusätzlich greift
+ein Namensfilter für Fälle, in denen der Typ vergessen wurde (`PASSWORT`, `PWD`,
+`API_KEY`, `…SCHLUESSEL`, `…PIN` und ähnliche). Der Katalog kann Geheimhaltung
+nur hinzufügen, nie aufheben.
 
 ## Befehle
 
@@ -206,7 +210,7 @@ lib\                 Programmteile
   update.ps1           Selbstaktualisierung
 scripts\             eigene Skripte (provider: script)
 custom\profiles\     gespeicherte Profile
-tests\               Tests (6 Dateien, 115 ohne Systemzugriff)
+tests\               Tests (6 Dateien, 118 ohne Systemzugriff)
 ```
 
 Protokolle und Laufzeitdaten liegen unter `%LOCALAPPDATA%\uwh`.

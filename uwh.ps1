@@ -286,7 +286,7 @@ if (-not (Show-UwhSummary $catalog $plan)) {
     if (Read-UwhConfirm 'Auswahl als Profil speichern?' $false) {
         $name = Read-UwhInline 'Name fuer das Profil:'
         if ($name) {
-            try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items)) }
+            try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items $catalog)) }
             catch { Write-UwhErr $_.Exception.Message }
         }
     }
@@ -297,7 +297,7 @@ if (-not (Show-UwhSummary $catalog $plan)) {
 if (Read-UwhConfirm 'Auswahl vorher als Profil speichern?' $false) {
     $name = Read-UwhInline 'Name fuer das Profil:'
     if ($name) {
-        try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items)) }
+        try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items $catalog)) }
         catch { Write-UwhErr $_.Exception.Message }
     }
 }
