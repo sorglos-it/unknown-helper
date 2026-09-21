@@ -89,7 +89,7 @@ function Test-UwhAdmin {
 function Resolve-UwhUncPath {
     param([Parameter(Mandatory)][string]$Path)
 
-    if ($Path -match '^\\') { return $Path }
+    if ($Path -match '^\\\\') { return $Path }
     if ($Path -notmatch '^([A-Za-z]):') { return $Path }
 
     $letter = $Matches[1]
@@ -109,7 +109,7 @@ function Resolve-UwhUncPath {
 
 function Test-UwhOnNetworkDrive {
     $root = Get-UwhRoot
-    if ($root -match '^\\') { return $true }
+    if ($root -match '^\\\\') { return $true }
     return ((Resolve-UwhUncPath $root) -ne $root)
 }
 

@@ -20,7 +20,7 @@ Für Rollouts ohne Internetzugang lässt sich das Archiv auch aus dem eigenen Ne
 holen, wahlweise ganz still:
 
 ```powershell
-.\install.ps1 -Quelle \server\freigabe\uwh-main.zip -KeineVerknuepfung -KeinStart
+.\install.ps1 -Quelle \\server\freigabe\uwh-main.zip -KeineVerknuepfung -KeinStart
 ```
 
 ## Bedienen
@@ -171,7 +171,7 @@ und der Administrator-Token ist eine andere. `Z:\...` existiert für ihn schlich
 nicht.
 
 uwh rechnet den eigenen Pfad deshalb vor jeder Rechteerhöhung und vor jeder
-Neustart-Fortsetzung auf den UNC-Pfad um (`\server\freigabe\...`).
+Neustart-Fortsetzung auf den UNC-Pfad um (`\\server\freigabe\...`).
 `.\uwh.ps1 -Doctor` zeigt an, ob das greift.
 
 ## Was uwh nicht macht
@@ -191,6 +191,9 @@ Neustart-Fortsetzung auf den UNC-Pfad um (`\server\freigabe\...`).
 
 ## Wenn PowerShell die Ausführung verweigert
 
+Doppelklick auf **`uwh.cmd`** — der Starter umgeht die Ausführungsrichtlinie.
+Oder von Hand:
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\uwh.ps1
 ```
@@ -201,6 +204,7 @@ Die Desktop-Verknüpfung macht das bereits von selbst.
 
 ```
 uwh.ps1              Einstieg
+uwh.cmd              Starter zum Doppelklicken
 install.ps1          Einrichtung per Einzeiler
 config.yaml          Katalog - hier kommen eigene Programme rein
 VERSION              Versionsnummer, steuert die Selbstaktualisierung

@@ -8,7 +8,7 @@
         %LOCALAPPDATA%\Programs\uwh
 
     Aus dem eigenen Netz statt aus dem Internet:
-        .\install.ps1 -Quelle \server\freigabe\uwh-main.zip
+        .\install.ps1 -Quelle \\server\freigabe\uwh-main.zip
 
     Still, ohne Desktop-Verknuepfung und ohne Start:
         .\install.ps1 -KeineVerknuepfung -KeinStart
