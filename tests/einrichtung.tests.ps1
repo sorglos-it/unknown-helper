@@ -56,8 +56,8 @@ function Baue-Archiv {
     foreach ($n in @('lib', 'scripts')) {
         Copy-Item (Join-Path $root $n) $inhalt -Recurse
     }
-    New-Item -ItemType Directory -Path (Join-Path $inhalt 'custom\profiles') -Force | Out-Null
-    Copy-Item (Join-Path $root 'custom\profiles\beispiel.yaml') (Join-Path $inhalt 'custom\profiles\beispiel.yaml')
+    New-Item -ItemType Directory -Path (Join-Path $inhalt 'profiles') -Force | Out-Null
+    Copy-Item (Join-Path $root 'profiles\beispiel.yaml') (Join-Path $inhalt 'profiles\beispiel.yaml')
     Set-Content -Path (Join-Path $inhalt 'VERSION') -Value $Version -Encoding UTF8 -NoNewline
 
     $datei = Join-Path $sandkasten ('uwh-' + $Version + '.zip')
@@ -77,7 +77,7 @@ $ziel   = Join-Path $sandkasten 'installiert'
 Test-Case 'Alle Dateien kommen an' {
     foreach ($n in @('uwh.ps1', 'config.yaml', 'VERSION', 'README.md',
                      'lib\core.ps1', 'lib\menu.ps1', 'lib\update.ps1',
-                     'scripts\_template.ps1', 'custom\profiles\beispiel.yaml')) {
+                     'scripts\_template.ps1', 'profiles\beispiel.yaml')) {
         Assert-True (Test-Path (Join-Path $ziel $n)) "Datei '$n'"
     }
 }
@@ -120,7 +120,7 @@ foreach ($lib in @('core', 'yaml', 'catalog', 'providers', 'menu', 'execute', 'p
 function Get-UwhRoot { $ziel }
 
 # Eigenes Profil - es muss die Aktualisierung ueberstehen.
-Set-Content -Path (Join-Path $ziel 'custom\profiles\meins.yaml') -Encoding UTF8 -Value @(
+Set-Content -Path (Join-Path $ziel 'profiles\meins.yaml') -Encoding UTF8 -Value @(
     'name: meins', 'select:', '  - 7zip')
 
 $neu = Baue-Archiv '0.2.0'
@@ -150,7 +150,7 @@ Test-Case 'Neue Dateien kommen dazu' {
 }
 
 Test-Case 'Eigene Profile ueberstehen die Aktualisierung' {
-    $datei = Join-Path $ziel 'custom\profiles\meins.yaml'
+    $datei = Join-Path $ziel 'profiles\meins.yaml'
     Assert-True (Test-Path $datei) 'Profil noch da'
     Assert-True ((Get-Content $datei -Raw) -like '*7zip*') 'Inhalt unveraendert'
 }

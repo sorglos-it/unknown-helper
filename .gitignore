@@ -1,11 +1,7 @@
-# Eigene Sachen des Anwenders
-custom/profiles/*.yaml
-!custom/profiles/beispiel.yaml
+# Eigene Profile bleiben lokal, nur das Beispiel gehoert ins Repo.
+profiles/*.yaml
+!profiles/beispiel.yaml
 
-# Laufzeit
-state/
-logs/
-*.log
-
+# Belege eines Claude-Code-Plugins, nicht Teil von uwh.
 receipts/
 review-receipts/

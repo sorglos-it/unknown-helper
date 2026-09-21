@@ -20,7 +20,14 @@
 #   recommended  true - im Menue vorausgewaehlt
 #   note         Hinweis, der vor der Ausfuehrung angezeigt wird
 #
-# Eigene Eintraege einfach anhaengen. Pruefen mit:  .\uwh.ps1 -Doctor
+# Fragen stehen unter 'actions' -> 'prompts' (Beispiel: Eintrag 'explorer'
+# unten). type ist text, yesno oder secret. 'secret' wird nie in ein Profil
+# geschrieben - bei Kennwoertern immer setzen.
+#
+# Eigene Eintraege einfach anhaengen, danach beides pruefen:
+#   .\uwh.ps1 -Doctor                                      Aufbau
+#   powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1   gibt es das Paket?
+# Paketkennungen veralten - beim Aufbau waren 5 von 46 falsch.
 
 categories:
   - Grundausstattung

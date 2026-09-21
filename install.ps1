@@ -109,7 +109,7 @@ try {
 
     # Vorhandene Profile bleiben bei einer Neuinstallation erhalten.
     $auslassen = @()
-    if (Test-Path (Join-Path $Ziel 'custom')) { $auslassen = @('custom') }
+    if (Test-Path (Join-Path $Ziel 'profiles')) { $auslassen = @('profiles') }
 
     # Copy-Item -Recurse wuerde einen vorhandenen Zielordner verschachteln.
     function Kopiere-Baum {

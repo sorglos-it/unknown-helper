@@ -420,21 +420,21 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     # So sieht ein frisch entpacktes Archiv aus.
     New-Item -ItemType Directory -Path (Join-Path $quelle 'lib') -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $quelle 'scripts') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $quelle 'custom\profiles') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $quelle 'profiles') -Force | Out-Null
     Set-Content (Join-Path $quelle 'VERSION')            '9.9.9'      -Encoding UTF8
     Set-Content (Join-Path $quelle 'uwh.ps1')            'neu'        -Encoding UTF8
     Set-Content (Join-Path $quelle 'lib\core.ps1')        'neu'        -Encoding UTF8
     Set-Content (Join-Path $quelle 'lib\dazu.ps1')        'dazu'       -Encoding UTF8
     Set-Content (Join-Path $quelle 'scripts\a.ps1')       'neu'        -Encoding UTF8
-    Set-Content (Join-Path $quelle 'custom\profiles\x.yaml') 'aus-archiv' -Encoding UTF8
+    Set-Content (Join-Path $quelle 'profiles\x.yaml') 'aus-archiv' -Encoding UTF8
 
     # So sieht die vorhandene Installation aus.
     New-Item -ItemType Directory -Path (Join-Path $ziel 'lib') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $ziel 'custom\profiles') -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $ziel 'profiles') -Force | Out-Null
     Set-Content (Join-Path $ziel 'VERSION')                 '0.1.0'  -Encoding UTF8
     Set-Content (Join-Path $ziel 'uwh.ps1')                 'alt'    -Encoding UTF8
     Set-Content (Join-Path $ziel 'lib\core.ps1')             'alt'    -Encoding UTF8
-    Set-Content (Join-Path $ziel 'custom\profiles\meins.yaml') 'meins'  -Encoding UTF8
+    Set-Content (Join-Path $ziel 'profiles\meins.yaml') 'meins'  -Encoding UTF8
 
     Copy-UwhTree $quelle $ziel
 
@@ -445,8 +445,8 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     Assert-True (Test-Path (Join-Path $ziel 'scripts\a.ps1')) 'fehlender Ordner angelegt'
 
     # Das Wichtigste: eigene Profile ueberleben die Aktualisierung.
-    Assert-Equal 'meins' (Get-Content (Join-Path $ziel 'custom\profiles\meins.yaml') -Raw).Trim() 'eigenes Profil unberuehrt'
-    Assert-True (-not (Test-Path (Join-Path $ziel 'custom\profiles\x.yaml'))) 'custom aus dem Archiv nicht uebernommen'
+    Assert-Equal 'meins' (Get-Content (Join-Path $ziel 'profiles\meins.yaml') -Raw).Trim() 'eigenes Profil unberuehrt'
+    Assert-True (-not (Test-Path (Join-Path $ziel 'profiles\x.yaml'))) 'Profile aus dem Archiv nicht uebernommen'
 }
 
 Test-Case 'Antworten liegen nicht im Klartext auf der Platte' {
