@@ -1,7 +1,3 @@
 # Eigene Profile bleiben lokal, nur das Beispiel gehoert ins Repo.
 profiles/*.yaml
 !profiles/beispiel.yaml
-
-# Belege eines Claude-Code-Plugins, nicht Teil von uwh.
-receipts/
-review-receipts/
