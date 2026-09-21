@@ -56,8 +56,12 @@ function Baue-Archiv {
     foreach ($n in @('lib', 'scripts')) {
         Copy-Item (Join-Path $root $n) $inhalt -Recurse
     }
-    New-Item -ItemType Directory -Path (Join-Path $inhalt 'profiles') -Force | Out-Null
-    Copy-Item (Join-Path $root 'profiles\beispiel.yaml') (Join-Path $inhalt 'profiles\beispiel.yaml')
+    # custom/ mit den Vorlagen - so wie im echten Archiv.
+    foreach ($n in @('custom\repo.yaml', 'custom\eigene\config.yaml', 'custom\profiles\beispiel.yaml', 'custom\keys\.gitignore')) {
+        $z = Join-Path $inhalt $n
+        New-Item -ItemType Directory -Path (Split-Path -Parent $z) -Force | Out-Null
+        Copy-Item (Join-Path $root $n) $z
+    }
     Set-Content -Path (Join-Path $inhalt 'VERSION') -Value $Version -Encoding UTF8 -NoNewline
 
     $datei = Join-Path $sandkasten ('uwh-' + $Version + '.zip')
@@ -77,7 +81,8 @@ $ziel   = Join-Path $sandkasten 'installiert'
 Test-Case 'Alle Dateien kommen an' {
     foreach ($n in @('uwh.ps1', 'config.yaml', 'VERSION', 'README.md',
                      'lib\core.ps1', 'lib\menu.ps1', 'lib\update.ps1',
-                     'scripts\_template.ps1', 'profiles\beispiel.yaml')) {
+                     'scripts\_template.ps1', 'custom\profiles\beispiel.yaml',
+                     'custom\repo.yaml', 'custom\eigene\config.yaml')) {
         Assert-True (Test-Path (Join-Path $ziel $n)) "Datei '$n'"
     }
 }
@@ -114,14 +119,24 @@ Write-Host ''
 Write-Host 'Selbstaktualisierung' -ForegroundColor Cyan
 
 # Die eingerichtete Fassung laden, nicht die aus dem Arbeitsverzeichnis.
-foreach ($lib in @('core', 'yaml', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $ziel "lib\$lib.ps1")
 }
 function Get-UwhRoot { $ziel }
 
 # Eigenes Profil - es muss die Aktualisierung ueberstehen.
-Set-Content -Path (Join-Path $ziel 'profiles\meins.yaml') -Encoding UTF8 -Value @(
+Set-Content -Path (Join-Path $ziel 'custom\profiles\meins.yaml') -Encoding UTF8 -Value @(
     'name: meins', 'select:', '  - 7zip')
+
+# Eigenes Programm - der Grund, warum es custom/ gibt.
+Set-Content -Path (Join-Path $ziel 'custom\eigene\config.yaml') -Encoding UTF8 -Value @(
+    'scripts:'
+    '  loxone:'
+    '    name: Loxone Config'
+    '    description: Eigener Eintrag'
+    '    provider: winget'
+    '    id: Loxone.LoxoneConfig'
+)
 
 $neu = Baue-Archiv '0.2.0'
 Set-Content -Path (Join-Path $neu.Ordner 'lib\neu.ps1') -Value '# neu dazugekommen' -Encoding UTF8
@@ -149,8 +164,21 @@ Test-Case 'Neue Dateien kommen dazu' {
     Assert-True (Test-Path (Join-Path $ziel 'lib\neu.ps1')) 'lib\neu.ps1'
 }
 
+Test-Case 'Eigene Programme ueberstehen die Aktualisierung' {
+    # Das Archiv bringt eine leere Vorlage fuer custom\eigene\config.yaml mit.
+    # Die darf den eigenen Eintrag nicht ueberschreiben.
+    $text = Get-Content (Join-Path $ziel 'custom\eigene\config.yaml') -Raw
+    Assert-True ($text -like '*Loxone Config*') 'eigener Eintrag noch da'
+
+    $c = Get-UwhCatalog
+    $e = Get-UwhEntry $c 'loxone'
+    Assert-True ($null -ne $e) 'im Katalog enthalten'
+    Assert-Equal 'Eigene Programme' $e.Category 'unter dem Namen des Repos'
+    Assert-Equal 'eigene' $e.Quelle 'Herkunft vermerkt'
+}
+
 Test-Case 'Eigene Profile ueberstehen die Aktualisierung' {
-    $datei = Join-Path $ziel 'profiles\meins.yaml'
+    $datei = Join-Path $ziel 'custom\profiles\meins.yaml'
     Assert-True (Test-Path $datei) 'Profil noch da'
     Assert-True ((Get-Content $datei -Raw) -like '*7zip*') 'Inhalt unveraendert'
 }

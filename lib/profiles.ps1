@@ -3,7 +3,7 @@
 Set-StrictMode -Version 2.0
 
 function Get-UwhProfileDir {
-    $dir = Get-UwhPath 'profiles'
+    $dir = Get-UwhPath 'custom\profiles'
     if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     return $dir
 }

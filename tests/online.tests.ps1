@@ -11,7 +11,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
 Set-UwhLogFile (Join-Path $env:TEMP 'uwh-online.log')
 
 $exe = Get-UwhWinget

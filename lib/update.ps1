@@ -46,8 +46,9 @@ function Test-UwhNewer {
     }
 }
 
-# Kopiert den Inhalt von Quelle nach Ziel und laesst 'profiles' in Ruhe -
-# das sind die Profile des Anwenders, eine Aktualisierung darf sie nie anfassen.
+# Kopiert den Inhalt von Quelle nach Ziel und laesst 'custom' in Ruhe - dort
+# liegt alles Eigene des Anwenders (Profile, eigene Repos, Schluessel), und
+# eine Aktualisierung darf es nie anfassen. Wie bei ulh.
 #
 # Copy-Item -Recurse auf einen VORHANDENEN Zielordner legt ihn verschachtelt
 # an ('lib\lib') statt zusammenzufuehren. Deshalb wird hier Datei fuer Datei
@@ -56,7 +57,7 @@ function Copy-UwhTree {
     param(
         [Parameter(Mandatory)][string]$Source,
         [Parameter(Mandatory)][string]$Target,
-        [string[]]$Skip = @('profiles')
+        [string[]]$Skip = @('custom')
     )
 
     if (-not (Test-Path -LiteralPath $Target)) {

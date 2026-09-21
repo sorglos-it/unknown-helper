@@ -29,25 +29,6 @@ function Invoke-UwhProvider {
 # Hilfsmittel: externes Programm ausfuehren
 # ------------------------------------------------------------------
 
-function Invoke-UwhExe {
-    param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string[]]$Arguments)
-
-    Write-UwhLog 'CMD' ("{0} {1}" -f $Exe, ($Arguments -join ' '))
-
-    # Fremdprogramme schreiben Warnungen nach stderr. Steht der Aufrufer auf
-    # 'Stop', wuerde daraus eine Ausnahme statt eines auswertbaren Ergebnisses.
-    # Die Zuweisung gilt nur in dieser Funktion.
-    $ErrorActionPreference = 'Continue'
-
-    $output = & $Exe @Arguments 2>&1
-    $code = $LASTEXITCODE
-    if ($null -eq $code) { $code = 0 }
-
-    $text = ($output | Out-String)
-    if ($text.Trim()) { Write-UwhLog 'OUT' $text.Trim() }
-
-    [pscustomobject]@{ Code = $code; Output = $text }
-}
 
 function Show-UwhFailure {
     param([string]$Output)

@@ -74,6 +74,32 @@ function Write-UwhStep {
 }
 
 # ------------------------------------------------------------------
+# Fremdprogramme ausfuehren
+# ------------------------------------------------------------------
+
+function Invoke-UwhExe {
+    param([Parameter(Mandatory)][string]$Exe, [Parameter(Mandatory)][string[]]$Arguments)
+
+    # Zugangsdaten in Adressen (https://nutzer:kennwort@...) nie ins Protokoll.
+    $sichtbar = @($Arguments | ForEach-Object { [string]$_ -replace '(://)[^/@\s]+@', '$1***@' })
+    Write-UwhLog 'CMD' ("{0} {1}" -f $Exe, ($sichtbar -join ' '))
+
+    # Fremdprogramme schreiben Warnungen nach stderr. Steht der Aufrufer auf
+    # 'Stop', wuerde daraus eine Ausnahme statt eines auswertbaren Ergebnisses.
+    # Die Zuweisung gilt nur in dieser Funktion.
+    $ErrorActionPreference = 'Continue'
+
+    $output = & $Exe @Arguments 2>&1
+    $code = $LASTEXITCODE
+    if ($null -eq $code) { $code = 0 }
+
+    $text = ($output | Out-String)
+    if ($text.Trim()) { Write-UwhLog 'OUT' $text.Trim() }
+
+    [pscustomobject]@{ Code = $code; Output = $text }
+}
+
+# ------------------------------------------------------------------
 # Rechte
 # ------------------------------------------------------------------
 

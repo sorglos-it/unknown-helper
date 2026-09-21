@@ -12,23 +12,87 @@ $script:UwhProviderActions = @{
     script     = @('install')
 }
 
+# Ohne Pfad: der Katalog von uwh plus die Kataloge aller aktiven eigenen Repos
+# unter custom/. Mit Pfad: nur diese eine Datei (fuer Pruefungen).
 function Get-UwhCatalog {
     param([string]$Path)
 
-    if (-not $Path) { $Path = Get-UwhPath 'config.yaml' }
+    if ($Path) { return Read-UwhCatalogFile $Path }
+
+    $haupt = Read-UwhCatalogFile (Get-UwhPath 'config.yaml')
+
+    $eintraege = [ordered]@{}
+    foreach ($e in $haupt.Entries) { $eintraege[$e.Key] = $e }
+    $kategorien = New-Object System.Collections.Generic.List[string]
+    foreach ($k in $haupt.Categories) { $kategorien.Add($k) }
+    $probleme = New-Object System.Collections.Generic.List[string]
+    foreach ($p in $haupt.Problems) { $probleme.Add($p) }
+
+    $info = Get-UwhRepos
+    foreach ($p in $info.Probleme) { $probleme.Add($p) }
+
+    $herkunft = New-Object System.Collections.Generic.List[object]
+    foreach ($k in @(Get-UwhRepoKataloge $info)) {
+        try {
+            $teil = Read-UwhCatalogFile $k.Datei $k.Repo.Id $k.Repo.Name
+        } catch {
+            $probleme.Add(("{0}: {1}" -f $k.Repo.Name, $_.Exception.Message))
+            continue
+        }
+
+        $ersetzt = 0
+        foreach ($e in $teil.Entries) {
+            # Eigene Eintraege gewinnen: wer 'firefox' selbst beschreibt, meint seine Fassung.
+            if ($eintraege.Contains($e.Key)) { $ersetzt++ }
+            $eintraege[$e.Key] = $e
+        }
+        foreach ($c in $teil.Categories) { if (-not $kategorien.Contains($c)) { $kategorien.Add($c) } }
+        foreach ($p in $teil.Problems) { $probleme.Add(("{0}: {1}" -f $k.Repo.Name, $p)) }
+
+        $herkunft.Add([pscustomobject]@{
+            Repo = $k.Repo; Anzahl = @($teil.Entries).Count; Ersetzt = $ersetzt
+        })
+    }
+
+    [pscustomobject]@{
+        Entries    = @($eintraege.Values)
+        Categories = $kategorien.ToArray()
+        Problems   = $probleme.ToArray()
+        Source     = $haupt.Source
+        Repos      = $herkunft.ToArray()
+    }
+}
+
+function Read-UwhCatalogFile {
+    param([Parameter(Mandatory)][string]$Path, [string]$Quelle = 'uwh', [string]$Kategorie = '')
+
     if (-not (Test-Path -LiteralPath $Path)) { throw "Katalog nicht gefunden: $Path" }
 
     $raw = Import-UwhYaml $Path
-    if (-not $raw -or -not $raw.Contains('scripts')) { throw "Katalog enthaelt keinen Abschnitt 'scripts'." }
+    if (-not $raw -or -not $raw.Contains('scripts')) {
+        # Ein eigenes Repo darf leer anfangen - der Katalog von uwh nicht.
+        if ($Quelle -ne 'uwh') {
+            return [pscustomobject]@{ Entries = @(); Categories = @(); Problems = @(); Source = $Path; Repos = @() }
+        }
+        throw "Katalog enthaelt keinen Abschnitt 'scripts'."
+    }
 
     $entries = New-Object System.Collections.Generic.List[object]
     $problems = New-Object System.Collections.Generic.List[string]
 
-    foreach ($key in $raw.scripts.Keys) {
-        try {
-            $entries.Add((ConvertTo-UwhEntry $key $raw.scripts[$key] (Split-Path -Parent $Path)))
-        } catch {
-            $problems.Add(("{0}: {1}" -f $key, $_.Exception.Message))
+    $liste = $raw['scripts']
+    if ($liste -is [System.Collections.IDictionary]) {
+        foreach ($key in $liste.Keys) {
+            try {
+                $e = ConvertTo-UwhEntry $key $liste[$key] (Split-Path -Parent $Path)
+                # In eigenen Repos ist die Kategorie freiwillig - ohne landet der
+                # Eintrag unter dem Namen des Repos.
+                if (-not $e.Category -and $Kategorie) { $e.Category = $Kategorie }
+                $e | Add-Member -NotePropertyName Quelle -NotePropertyValue $Quelle
+                $entries.Add($e)
+            } catch {
+                $problems.Add(("{0}: {1}" -f $key, $_.Exception.Message))
+            }
         }
     }
 
@@ -41,6 +105,7 @@ function Get-UwhCatalog {
         Categories = $categories
         Problems   = $problems.ToArray()
         Source     = $Path
+        Repos      = @()
     }
 }
 

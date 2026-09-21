@@ -26,7 +26,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-foreach ($lib in @('core', 'yaml', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $PSScriptRoot "lib\$lib.ps1")
 }
 
@@ -67,9 +67,25 @@ if ($Doctor) {
     if (Test-UwhOnNetworkDrive) {
         Write-Host ("  Netzlaufwerk      ja -> erhoeht wird {0} benutzt" -f (Resolve-UwhUncPath (Get-UwhRoot))) -ForegroundColor Yellow
     }
+    Write-Host ("  git               {0}" -f $(if (Get-UwhGit) { Get-UwhGit } else { 'fehlt - eigene Repos nur als lokaler Ordner' }))
     try {
         $cat = Get-UwhCatalog
         Write-Host ("  Katalog           {0} Eintraege, {1} Kategorien" -f $cat.Entries.Count, $cat.Categories.Count)
+
+        $info = Get-UwhRepos
+        if (@($info.Repos).Count -gt 0) {
+            Write-Host '  Eigene Repos'
+            foreach ($r in $info.Repos) {
+                $treffer = @($cat.Repos | Where-Object { $_.Repo.Id -eq $r.Id }) | Select-Object -First 1
+                $stand = if (-not $r.Aktiv) { 'aus' }
+                         elseif (-not (Test-Path -LiteralPath $r.Pfad)) { 'Ordner fehlt' }
+                         elseif ($treffer) { '{0} Eintraege' -f $treffer.Anzahl } else { 'keine config.yaml' }
+                if ($treffer -and $treffer.Ersetzt -gt 0) { $stand += (', {0} ersetzen uwh-Eintraege' -f $treffer.Ersetzt) }
+                $art = if ($r.Url) { 'git' } else { 'lokal' }
+                Write-Host ("    {0,-22} {1,-6} {2}" -f $r.Name, $art, $stand)
+            }
+        }
+
         if ($cat.Problems.Count -gt 0) {
             Write-Host '  Fehlerhafte Eintraege:' -ForegroundColor Yellow
             $cat.Problems | ForEach-Object { Write-Host "    - $_" -ForegroundColor DarkGray }
@@ -106,6 +122,10 @@ if ($List) {
 # ------------------------------------------------------------------
 
 if (-not $NoUpdate -and -not $Resume) {
+    # Eigene Repos zuerst: startet uwh sich nach der eigenen Aktualisierung neu,
+    # tut es das mit -NoUpdate - und haette die Repos sonst uebersprungen.
+    Sync-UwhRepos
+
     if (Update-Uwh) {
         $forward = @('-NoUpdate')
         foreach ($p in $PSBoundParameters.GetEnumerator()) {

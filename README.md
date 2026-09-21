@@ -61,12 +61,15 @@ abspielen:
 .\uwh.ps1 -Profile Arbeitsplatz
 ```
 
-Profile liegen in `profiles\`. Kennwörter werden nie gespeichert.
+Profile liegen in `custom\profiles\`. Kennwörter werden nie gespeichert.
 
 ## Eigene Programme
 
-In `config.yaml` eintragen — wie, steht oben in der Datei. Für alles andere ein
-eigenes Skript nach der Vorlage `scripts\_template.ps1`.
+In `custom\eigene\config.yaml` eintragen — wie, steht oben in der Datei.
+Alles unter `custom\` gehört dir: ein Update von uwh fasst es nie an.
+
+Mehrere Rechner oder ein Team: eigene Repos per git, eingetragen in
+`custom\repo.yaml` — so wie bei ulh.
 
 ## Wenn etwas nicht geht
 

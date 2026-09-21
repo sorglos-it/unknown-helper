@@ -1,3 +1,10 @@
-# Eigene Profile bleiben lokal, nur das Beispiel gehoert ins Repo.
-profiles/*.yaml
-!profiles/beispiel.yaml
+# custom/ gehoert dem Anwender und bleibt lokal. Im Repo sind nur die Vorlagen.
+custom/*
+!custom/repo.yaml
+!custom/eigene/
+custom/eigene/*
+!custom/eigene/config.yaml
+!custom/profiles/
+custom/profiles/*
+!custom/profiles/beispiel.yaml
+!custom/keys/

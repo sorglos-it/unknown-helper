@@ -1,0 +1,22 @@
+# Eigene Programme
+#
+# Hier eintragen, was im Katalog von uwh fehlt. Diese Datei fasst die
+# Aktualisierung von uwh nie an - anders als die config.yaml von uwh selbst.
+#
+# Aufbau wie in der config.yaml von uwh, steht dort oben erklaert. 'category'
+# ist hier freiwillig: ohne landet der Eintrag unter "Eigene Programme".
+# Gleicher Name wie ein uwh-Eintrag = deine Fassung ersetzt die von uwh.
+#
+# Eigene Skripte gehoeren nach custom\eigene\scripts\ (Vorlage:
+# scripts\_template.ps1 von uwh).
+#
+# Danach pruefen:  .\uwh.ps1 -Doctor
+#
+# Beispiel - die Raute am Zeilenanfang entfernen:
+#
+# scripts:
+#   treesize:
+#     name: TreeSize Free
+#     description: Zeigt, was den Speicher belegt
+#     provider: winget
+#     id: JAMSoftware.TreeSize.Free

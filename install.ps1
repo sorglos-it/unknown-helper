@@ -107,9 +107,9 @@ try {
 
     if (-not (Test-Path $Ziel)) { New-Item -ItemType Directory -Path $Ziel -Force | Out-Null }
 
-    # Vorhandene Profile bleiben bei einer Neuinstallation erhalten.
+    # Alles Eigene unter custom/ bleibt bei einer Neuinstallation erhalten.
     $auslassen = @()
-    if (Test-Path (Join-Path $Ziel 'profiles')) { $auslassen = @('profiles') }
+    if (Test-Path (Join-Path $Ziel 'custom')) { $auslassen = @('custom') }
 
     # Copy-Item -Recurse wuerde einen vorhandenen Zielordner verschachteln.
     function Kopiere-Baum {

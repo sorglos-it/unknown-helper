@@ -1,0 +1,373 @@
+﻿# Prueft eigene Repos: custom/repo.yaml lesen, Kataloge zusammenfuehren,
+# per git holen und aktualisieren, Zugangsdaten schuetzen.
+#
+# git laeuft echt, aber gegen ein lokales Repo (file:///) - kein Netz noetig.
+# Ohne git werden nur die git-Pruefungen uebersprungen.
+#
+# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\eigene.tests.ps1
+
+Set-StrictMode -Version 2.0
+$ErrorActionPreference = 'Stop'
+
+$root = Split-Path -Parent $PSScriptRoot
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+
+# uwh wird fuer die ganze Pruefung in einen eigenen Ordner umgeleitet.
+$sb = Join-Path $env:TEMP ('uwh-eigene-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
+New-Item -ItemType Directory -Path (Join-Path $sb 'custom') -Force | Out-Null
+function Get-UwhRoot { $sb }
+$protokoll = Join-Path $sb 'test.log'
+Set-UwhLogFile $protokoll
+
+$script:Pass = 0
+$script:Fail = 0
+function Test-Case {
+    param([string]$Name, [scriptblock]$Body)
+    try {
+        & $Body
+        $script:Pass++
+        Write-Host "  ok    $Name" -ForegroundColor DarkGreen
+    } catch {
+        $script:Fail++
+        Write-Host "  FEHL  $Name" -ForegroundColor Red
+        Write-Host "        $($_.Exception.Message)" -ForegroundColor DarkGray
+    }
+}
+function Assert-Equal {
+    param($Expected, $Actual, [string]$What = 'Wert')
+    if ($Expected -ne $Actual) { throw ("{0}: erwartet '{1}', erhalten '{2}'" -f $What, $Expected, $Actual) }
+}
+function Assert-True {
+    param($Condition, [string]$What = 'Bedingung')
+    if (-not $Condition) { throw "$What war nicht erfuellt" }
+}
+function Schreibe {
+    param([string]$Relativ, [string[]]$Zeilen)
+    $p = Join-Path $sb $Relativ
+    New-Item -ItemType Directory -Path (Split-Path -Parent $p) -Force | Out-Null
+    Set-Content -LiteralPath $p -Encoding UTF8 -Value $Zeilen
+}
+
+# ------------------------------------------------------------------
+# Ein kleiner uwh mit eigenem Repo
+# ------------------------------------------------------------------
+
+Schreibe 'config.yaml' @(
+    'categories:'
+    '  - Grundausstattung'
+    '  - Browser'
+    'scripts:'
+    '  7zip:'
+    '    name: 7-Zip'
+    '    description: Archive'
+    '    category: Grundausstattung'
+    '    provider: winget'
+    '    id: 7zip.7zip'
+    '  firefox:'
+    '    name: Mozilla Firefox'
+    '    description: Webbrowser'
+    '    category: Browser'
+    '    provider: winget'
+    '    id: Mozilla.Firefox.de'
+)
+
+Schreibe 'custom\eigene\config.yaml' @(
+    'scripts:'
+    '  loxone:'
+    '    name: Loxone Config'
+    '    description: Ohne Kategorie'
+    '    provider: winget'
+    '    id: Loxone.LoxoneConfig'
+    '  vivaldi:'
+    '    name: Vivaldi'
+    '    description: In einer vorhandenen Kategorie'
+    '    category: Browser'
+    '    provider: winget'
+    '    id: Vivaldi.Vivaldi'
+    '  firefox:'
+    '    name: Firefox (eigene Fassung)'
+    '    description: Ersetzt den uwh-Eintrag'
+    '    category: Browser'
+    '    provider: winget'
+    '    id: Mozilla.Firefox.ESR'
+    '  hallo:'
+    '    name: Hallo'
+    '    description: Eigenes Skript'
+    '    provider: script'
+    '    file: hallo.ps1'
+    '    admin: false'
+)
+Schreibe 'custom\eigene\scripts\hallo.ps1' @('param($Action)', 'exit 0')
+
+Schreibe 'custom\aus\config.yaml' @(
+    'scripts:', '  versteckt:', '    name: X', '    description: X', '    provider: winget', '    id: Nicht.Sichtbar')
+
+Schreibe 'custom\kaputt\config.yaml' @('scripts:', "`tfalsch: eingerueckt")
+
+Schreibe 'custom\repo.yaml' @(
+    'repositories:'
+    '  eigene:'
+    '    name: Eigene Programme'
+    '    url: ""'
+    '    path: eigene'
+    '    enabled:'
+    '  aus:'
+    '    name: Ausgeschaltet'
+    '    path: aus'
+    '  kaputt:'
+    '    name: Kaputt'
+    '    path: kaputt'
+    '    enabled:'
+    '  boeser-pfad:'
+    '    path: ..\ausserhalb'
+    '    enabled:'
+    '  boese-url:'
+    '    url: http://unsicher.example/x.git'
+    '    enabled:'
+    '  boese-anmeldung:'
+    '    auth_method: zauberei'
+    '  reserviert:'
+    '    path: keys'
+    '    enabled:'
+)
+
+Write-Host ''
+Write-Host 'Schalter wie bei ulh' -ForegroundColor Cyan
+
+Test-Case 'enabled: ohne Wert schaltet an' {
+    Assert-True (Test-UwhSchalter ([ordered]@{ enabled = $null }) 'enabled') 'ohne Wert'
+    Assert-True (Test-UwhSchalter ([ordered]@{ enabled = $true }) 'enabled') 'true'
+}
+
+Test-Case 'enabled: false schaltet ab - keine Falle' {
+    foreach ($w in @($false, 'false', 'nein', 'no', 'aus')) {
+        if (Test-UwhSchalter ([ordered]@{ enabled = $w }) 'enabled') { throw "'$w' hat angeschaltet" }
+    }
+}
+
+Test-Case 'Fehlender Schalter ist aus' {
+    Assert-True (-not (Test-UwhSchalter ([ordered]@{ name = 'x' }) 'enabled')) 'fehlt'
+}
+
+Write-Host ''
+Write-Host 'custom/repo.yaml' -ForegroundColor Cyan
+
+$info = Get-UwhRepos
+
+Test-Case 'Gueltige Repos werden gelesen' {
+    $ids = @($info.Repos | ForEach-Object { $_.Id })
+    foreach ($id in @('eigene', 'aus', 'kaputt')) { Assert-True ($ids -contains $id) "Repo '$id'" }
+    $e = $info.Repos | Where-Object { $_.Id -eq 'eigene' }
+    Assert-True $e.Aktiv 'eigene ist an'
+    Assert-Equal (Join-Path (Join-Path $sb 'custom') 'eigene') $e.Pfad 'liegt unter custom'
+}
+
+Test-Case 'Unsichere Eintraege werden abgelehnt, nicht uebernommen' {
+    $ids = @($info.Repos | ForEach-Object { $_.Id })
+    foreach ($id in @('boeser-pfad', 'boese-url', 'boese-anmeldung', 'reserviert')) {
+        Assert-True ($ids -notcontains $id) "'$id' nicht uebernommen"
+        Assert-True (@($info.Probleme | Where-Object { $_ -like "*$id*" }).Count -gt 0) "'$id' gemeldet"
+    }
+}
+
+Test-Case 'Ohne repo.yaml gibt es einfach keine eigenen Repos' {
+    $leer = Get-UwhRepos (Join-Path $sb 'gibtsnicht.yaml')
+    Assert-Equal 0 @($leer.Repos).Count 'keine Repos'
+    Assert-Equal 0 @($leer.Probleme).Count 'kein Fehler'
+}
+
+Write-Host ''
+Write-Host 'Katalog zusammenfuehren' -ForegroundColor Cyan
+
+$katalog = Get-UwhCatalog
+
+Test-Case 'Eigene Eintraege erscheinen im Katalog' {
+    foreach ($k in @('loxone', 'vivaldi', 'hallo')) {
+        Assert-True ($null -ne (Get-UwhEntry $katalog $k)) "Eintrag '$k'"
+    }
+    Assert-True ($null -ne (Get-UwhEntry $katalog '7zip')) 'uwh-Eintraege bleiben'
+}
+
+Test-Case 'Ohne Kategorie landet ein Eintrag unter dem Namen des Repos' {
+    Assert-Equal 'Eigene Programme' (Get-UwhEntry $katalog 'loxone').Category 'Kategorie'
+    Assert-True ($katalog.Categories -contains 'Eigene Programme') 'Kategorie angelegt'
+}
+
+Test-Case 'Mit vorhandener Kategorie reiht er sich dort ein' {
+    Assert-Equal 'Browser' (Get-UwhEntry $katalog 'vivaldi').Category 'Kategorie'
+    Assert-Equal 1 @($katalog.Categories | Where-Object { $_ -eq 'Browser' }).Count 'Browser nur einmal'
+}
+
+Test-Case 'Gleicher Name: die eigene Fassung ersetzt die von uwh' {
+    $f = Get-UwhEntry $katalog 'firefox'
+    Assert-Equal 'Mozilla.Firefox.ESR' $f.Id 'eigene Kennung'
+    Assert-Equal 'eigene' $f.Quelle 'Herkunft'
+    Assert-Equal 1 @($katalog.Entries | Where-Object { $_.Key -eq 'firefox' }).Count 'nicht doppelt'
+    $r = $katalog.Repos | Where-Object { $_.Repo.Id -eq 'eigene' }
+    Assert-Equal 1 $r.Ersetzt 'als Ersetzung gezaehlt'
+}
+
+Test-Case 'Ausgeschaltete Repos bleiben draussen' {
+    Assert-True ($null -eq (Get-UwhEntry $katalog 'versteckt')) 'nicht im Katalog'
+}
+
+Test-Case 'Ein kaputtes Repo verdirbt nicht den Rest' {
+    Assert-True (@($katalog.Problems | Where-Object { $_ -like 'Kaputt*' }).Count -gt 0) 'gemeldet'
+    Assert-True ($null -ne (Get-UwhEntry $katalog '7zip')) 'uwh laeuft weiter'
+    Assert-True ($null -ne (Get-UwhEntry $katalog 'loxone')) 'andere Repos laufen weiter'
+}
+
+Test-Case 'Skripte eigener Repos liegen im eigenen scripts-Ordner' {
+    $h = Get-UwhEntry $katalog 'hallo'
+    $pfad = Join-Path (Join-Path $h.BaseDir 'scripts') $h.File
+    Assert-True (Test-Path -LiteralPath $pfad) "gefunden unter $pfad"
+}
+
+Test-Case 'Ein leeres eigenes Repo ist kein Fehler' {
+    Schreibe 'custom\leer\config.yaml' @('# noch nichts eingetragen')
+    $t = Read-UwhCatalogFile (Join-Path $sb 'custom\leer\config.yaml') 'leer' 'Leer'
+    Assert-Equal 0 @($t.Entries).Count 'keine Eintraege'
+    Assert-Equal 0 @($t.Problems).Count 'kein Problem'
+}
+
+Write-Host ''
+Write-Host 'Zugangsdaten' -ForegroundColor Cyan
+
+Test-Case 'Adressen mit Kennwort werden im Protokoll geschwaerzt' {
+    [void](Invoke-UwhExe (Join-Path $env:SystemRoot 'System32\cmd.exe') @('/c', 'rem', 'https://thomas:Hu7xQz@git.example/a.git'))
+    $text = Get-Content -LiteralPath $protokoll -Raw
+    Assert-True ($text -notlike '*Hu7xQz*') 'Kennwort nicht im Protokoll'
+    Assert-True ($text -like '*https://***@git.example*') 'geschwaerzt statt entfernt'
+}
+
+Test-Case '${NAME} wird aus der Umgebung geholt' {
+    $env:UWH_TEST_GEHEIM = 'aus-der-umgebung'
+    try {
+        Assert-Equal 'x-aus-der-umgebung-y' (Expand-UwhVariable 'x-${UWH_TEST_GEHEIM}-y') 'ersetzt'
+        Assert-Equal 'x--y' (Expand-UwhVariable 'x-${UWH_GIBTS_NICHT}-y') 'unbekannt wird leer'
+    } finally {
+        Remove-Item Env:\UWH_TEST_GEHEIM -ErrorAction SilentlyContinue
+    }
+}
+
+$git = Get-UwhGit
+if (-not $git) {
+    Write-Host ''
+    Write-Host '  git fehlt - die git-Pruefungen werden uebersprungen.' -ForegroundColor DarkYellow
+} else {
+    Write-Host ''
+    Write-Host 'git' -ForegroundColor Cyan
+
+    function Git { param([string[]]$A) & $git @A 2>&1 | Out-Null; if ($LASTEXITCODE) { throw "git $($A -join ' ') -> $LASTEXITCODE" } }
+    $ich = @('-c', 'user.name=uwh-test', '-c', 'user.email=test@uwh.invalid')
+
+    # Quelle: ein normales Repo, daraus ein blankes als "Server".
+    $arbeit = Join-Path $sb 'arbeit'
+    $server = Join-Path $sb 'server.git'
+    Git @('init', '--quiet', $arbeit)
+    Set-Content -LiteralPath (Join-Path $arbeit 'config.yaml') -Encoding UTF8 -Value @(
+        'scripts:', '  eins:', '    name: Eins', '    description: Aus git', '    provider: winget', '    id: Eins.Eins')
+    Git @('-C', $arbeit, 'add', '.')
+    Git (@('-C', $arbeit) + $ich + @('commit', '--quiet', '-m', 'eins'))
+    Git @('clone', '--quiet', '--bare', $arbeit, $server)
+    Git @('-C', $arbeit, 'remote', 'add', 'origin', $server)
+    $url = ([uri]$server).AbsoluteUri
+
+    Schreibe 'custom\repo.yaml' @(
+        'repositories:'
+        '  fern:'
+        '    name: Fern'
+        "    url: $url"
+        '    path: fern'
+        '    enabled:'
+        '    auto_update:'
+        '  nur-an:'
+        '    name: Nur an'
+        "    url: $url"
+        '    path: nur-an'
+        '    enabled:'
+        '  nur-aus:'
+        '    name: Nie geholt'
+        "    url: $url"
+        '    path: nur-aus'
+        'update_settings:'
+        '  retry_on_failure: 1'
+        '  retry_delay_seconds: 0'
+    )
+
+    Sync-UwhRepos -Quiet
+
+    Test-Case 'Aktives Repo mit Adresse wird geholt' {
+        Assert-True (Test-Path (Join-Path $sb 'custom\fern\config.yaml')) 'fern geholt'
+        Assert-True (Test-Path (Join-Path $sb 'custom\nur-an\config.yaml')) 'nur-an geholt'
+        Assert-True ($null -ne (Get-UwhEntry (Get-UwhCatalog) 'eins')) 'Eintrag im Katalog'
+    }
+
+    Test-Case 'Ohne enabled wird nichts geholt' {
+        Assert-True (-not (Test-Path (Join-Path $sb 'custom\nur-aus'))) 'nicht geholt'
+    }
+
+    # Neuer Stand auf dem "Server".
+    Add-Content -LiteralPath (Join-Path $arbeit 'config.yaml') -Encoding UTF8 -Value @(
+        '  zwei:', '    name: Zwei', '    description: Nachgeschoben', '    provider: winget', '    id: Zwei.Zwei')
+    Git (@('-C', $arbeit) + $ich + @('commit', '--quiet', '-am', 'zwei'))
+    Git @('-C', $arbeit, 'push', '--quiet', 'origin', 'HEAD')
+
+    Sync-UwhRepos -Quiet
+
+    Test-Case 'Mit auto_update wird beim Start aktualisiert' {
+        $text = Get-Content (Join-Path $sb 'custom\fern\config.yaml') -Raw
+        Assert-True ($text -like '*Zwei*') 'neuer Stand da'
+    }
+
+    Test-Case 'Ohne auto_update bleibt der alte Stand' {
+        $text = Get-Content (Join-Path $sb 'custom\nur-an\config.yaml') -Raw
+        Assert-True ($text -notlike '*Zwei*') 'alter Stand'
+    }
+
+    Test-Case 'Zugangsdaten landen weder im Protokoll noch in .git/config' {
+        $token = 'GeheimesToken' + [guid]::NewGuid().ToString('N').Substring(0, 6)
+        $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${token}:"))
+        $repo = [pscustomobject]@{
+            Id = 'geheim'; Name = 'Geheim'; Url = $url; Ordner = 'geheim'
+            Pfad = Join-Path $sb 'custom\geheim'; Auth = 'https_token'
+            SshKey = ''; Token = $token; Benutzer = ''; Kennwort = ''; Aktiv = $true; AutoUpdate = $false
+        }
+        $r = Invoke-UwhGit $repo @('clone', '--quiet', $url, $repo.Pfad)
+        Assert-Equal 0 $r.Code 'geholt'
+
+        $log = Get-Content -LiteralPath $protokoll -Raw
+        Assert-True ($log -notlike "*$token*") 'Token nicht im Protokoll'
+        Assert-True ($log -notlike "*$b64*")   'auch nicht verschluesselt'
+
+        $cfg = Get-Content -LiteralPath (Join-Path $repo.Pfad '.git\config') -Raw
+        Assert-True ($cfg -notlike "*$token*") 'Token nicht in .git/config'
+    }
+
+    Test-Case 'Nach dem git-Aufruf ist die Umgebung wie vorher' {
+        $env:GIT_CONFIG_COUNT = 'vorher'
+        try {
+            $repo = [pscustomobject]@{
+                Id = 'x'; Name = 'X'; Url = $url; Ordner = 'x'; Pfad = Join-Path $sb 'custom\x'
+                Auth = 'https_basic'; SshKey = ''; Token = ''; Benutzer = 'nutzer'; Kennwort = 'Kw7x'
+                Aktiv = $true; AutoUpdate = $false
+            }
+            [void](Invoke-UwhGit $repo @('--version'))
+            Assert-Equal 'vorher' $env:GIT_CONFIG_COUNT 'alter Wert zurueck'
+            Assert-True ($null -eq $env:GIT_CONFIG_VALUE_0) 'kein Kopf liegen geblieben'
+            Assert-True ($null -eq $env:GIT_TERMINAL_PROMPT) 'keine Einstellung liegen geblieben'
+        } finally {
+            Remove-Item Env:\GIT_CONFIG_COUNT -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+# ------------------------------------------------------------------
+
+Remove-Item -LiteralPath $sb -Recurse -Force -ErrorAction SilentlyContinue
+
+Write-Host ''
+Write-Host ("  {0} bestanden, {1} fehlgeschlagen" -f $script:Pass, $script:Fail) -ForegroundColor $(if ($script:Fail) { 'Red' } else { 'Green' })
+Write-Host ''
+if ($script:Fail -gt 0) { exit 1 }
+exit 0
