@@ -5,13 +5,13 @@
 # dabei das System. Hier werden die Windows-Befehle durch Attrappen ersetzt:
 # geprueft wird die Entscheidung von uwh, nicht Windows selbst.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\provider.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\provider.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
 Set-UwhLogFile (Join-Path $env:TEMP 'uwh-provider.log')
 
 $script:Pass = 0

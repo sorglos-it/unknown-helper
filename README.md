@@ -2,20 +2,23 @@
 
 Software für Windows auswählen und in einem Rutsch installieren. Die Auswahl
 lässt sich als Profil speichern und auf dem nächsten Rechner wiederholen.
-
 Windows-Gegenstück zu [ulh](https://github.com/sorglos-it/ulh).
 
-## Starten
+| Ordner | Zweck | Sprache | Start | Build |
+|---|---|---|---|---|
+| `apps/cli` | Software auswählen und installieren | PowerShell 5.1 | `apps\cli\uwh.cmd` | keiner nötig |
 
-Doppelklick auf **`uwh.cmd`**.
+## Start in 3 Schritten
 
-Auf einem neuen Rechner PowerShell öffnen und einfügen:
+1. **PowerShell** öffnen: Startmenü, `PowerShell` eintippen, Enter.
+2. Diese Zeile einfügen, Enter:
+   ```powershell
+   irm https://raw.githubusercontent.com/sorglos-it/uwh/main/tools/install.ps1 | iex
+   ```
+3. Künftig auf dem Desktop **uwh** doppelklicken.
 
-```powershell
-irm https://raw.githubusercontent.com/sorglos-it/uwh/main/install.ps1 | iex
-```
-
-Danach liegt **uwh** auf dem Desktop.
+Schon eine Kopie des Ordners da? Dann reicht ein Doppelklick auf
+**`apps\cli\uwh.cmd`**.
 
 ## Bedienen
 
@@ -55,27 +58,32 @@ Neustart hinweg.
 ## Profile
 
 Nach der Auswahl fragt uwh, ob sie als Profil gespeichert werden soll. Wieder
-abspielen:
+abspielen, im Ordner `apps\cli`:
 
 ```powershell
 .\uwh.ps1 -Profile Arbeitsplatz
 ```
 
-Profile liegen in `custom\profiles\`. Kennwörter werden nie gespeichert.
+Profile liegen in `apps\cli\data\profiles\`. Kennwörter werden nie gespeichert.
 
 ## Eigene Programme
 
-In `custom\eigene\config.yaml` eintragen — wie, steht oben in der Datei.
-Alles unter `custom\` gehört dir: ein Update von uwh fasst es nie an.
+In `apps\cli\data\eigene\config.yaml` eintragen — wie, steht oben in der Datei.
+`apps\cli\data\` und `apps\cli\config\` gehören dir: ein Update von uwh fasst
+sie nie an.
 
 Mehrere Rechner oder ein Team: eigene Repos per git, eingetragen in
-`custom\repo.yaml` — so wie bei ulh.
+`apps\cli\config\repo.yaml` — so wie bei ulh.
 
 ## Wenn etwas nicht geht
+
+Im Ordner `apps\cli`:
 
 ```powershell
 .\uwh.ps1 -Doctor
 ```
+
+Protokolle liegen in `apps\cli\data\logs\`.
 
 Braucht Windows 10 oder 11 und winget (bei Windows 11 dabei, bei Windows 10 als
 „App Installer" im Microsoft Store).

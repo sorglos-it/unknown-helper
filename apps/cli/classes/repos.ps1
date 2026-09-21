@@ -1,9 +1,11 @@
-﻿# uwh - Eigene Repos: custom/repo.yaml lesen, per git holen, Kataloge finden
+﻿# uwh - Eigene Repos: config\repo.yaml lesen, per git holen, Kataloge finden
 #
-# Wie bei ulh gehoert alles unter custom/ dem Anwender. Die Aktualisierung von
-# uwh fasst diesen Ordner nie an. Eigene Programme stehen deshalb nicht in der
-# config.yaml von uwh, sondern in eigenen Repos - jedes mit eigener
-# config.yaml und eigenem scripts/.
+# Das Modell stammt aus ulh (custom/ dort): alles Eigene liegt getrennt, und die
+# Aktualisierung von uwh fasst es nie an. Nach dem Projektstandard heisst das hier
+# config\ (Einstellungen, im Repo nur *.example) und data\ (Profile,
+# Schluessel, eigene Repos - nicht im Repo). Eigene Programme stehen deshalb nicht
+# im Katalog von uwh, sondern in eigenen Repos - jedes mit eigener config.yaml
+# und eigenem scripts\.
 #
 # Unterschied zu ulh: git ist unter Windows nicht immer installiert. Ein
 # eigenes Repo funktioniert deshalb immer als lokaler Ordner und wird nur dann
@@ -15,7 +17,8 @@ $script:UwhRepoAuth = @('none', 'ssh', 'https_token', 'https_basic')
 $script:UwhGitPath = $null
 $script:UwhGitGewarnt = $false
 
-function Get-UwhCustomDir { Get-UwhPath 'custom' }
+function Get-UwhConfigDir { Get-UwhPath 'config' }
+function Get-UwhDataDir { Get-UwhPath 'data' }
 
 # ulh setzt Schalter durch blosses Vorhandensein ('enabled:' ohne Wert). Das
 # bleibt so. Ein ausdrueckliches 'false' schaltet trotzdem ab - alles andere
@@ -51,13 +54,13 @@ function Expand-UwhVariable {
 }
 
 # ------------------------------------------------------------------
-# custom/repo.yaml lesen
+# config\repo.yaml lesen
 # ------------------------------------------------------------------
 
 function Get-UwhRepos {
     param([string]$Datei)
 
-    if (-not $Datei) { $Datei = Join-Path (Get-UwhCustomDir) 'repo.yaml' }
+    if (-not $Datei) { $Datei = Join-Path (Get-UwhConfigDir) 'repo.yaml' }
 
     $repos = New-Object System.Collections.Generic.List[object]
     $probleme = New-Object System.Collections.Generic.List[string]
@@ -107,13 +110,13 @@ function ConvertTo-UwhRepo {
     if (-not (Test-UwhSafeName $Id)) { throw 'Kennung enthaelt unerlaubte Zeichen.' }
     if (-not ($Daten -is [System.Collections.IDictionary])) { $Daten = [ordered]@{} }
 
-    # Der Ordner liegt immer unter custom/. Anders als ulh erlaubt uwh keine
+    # Der Ordner liegt immer unter data\. Anders als ulh erlaubt uwh keine
     # absoluten Pfade: eigene Repos sollen genau dort liegen, wo das Update sie
     # nie anfasst.
     $ordner = [string](Get-UwhField $Daten 'path')
     if (-not $ordner) { $ordner = $Id }
     if (-not (Test-UwhSafeName $ordner)) { throw "path '$ordner' muss ein einfacher Ordnername sein." }
-    if ($ordner -in @('profiles', 'keys')) { throw "path '$ordner' ist fuer uwh selbst reserviert." }
+    if ($ordner -in @('profiles', 'keys', 'state', 'logs')) { throw "path '$ordner' ist fuer uwh selbst reserviert." }
 
     $url = [string](Get-UwhField $Daten 'url')
     if ($url -and -not (Test-UwhRepoUrl $url)) {
@@ -132,7 +135,7 @@ function ConvertTo-UwhRepo {
         Name       = $name
         Url        = $url
         Ordner     = $ordner
-        Pfad       = Join-Path (Get-UwhCustomDir) $ordner
+        Pfad       = Join-Path (Get-UwhDataDir) $ordner
         Auth       = $auth
         SshKey     = [string](Get-UwhField $Daten 'ssh_key')
         Token      = [string](Get-UwhField $Daten 'token')
@@ -140,6 +143,30 @@ function ConvertTo-UwhRepo {
         Kennwort   = [string](Get-UwhField $Daten 'password')
         Aktiv      = Test-UwhSchalter $Daten 'enabled'
         AutoUpdate = Test-UwhSchalter $Daten 'auto_update'
+    }
+}
+
+# Beim ersten Start die eigenen Dateien aus den Vorlagen anlegen. Vorhandenes
+# wird nie ueberschrieben - das gehoert dem Anwender.
+function Initialize-UwhEigenes {
+    $paare = @(
+        @{ Von = (Get-UwhPath 'config\repo.yaml.example'); Nach = (Join-Path (Get-UwhConfigDir) 'repo.yaml') }
+        @{ Von = (Get-UwhPath 'templates\eigene.yaml');      Nach = (Join-Path (Get-UwhDataDir) 'eigene\config.yaml') }
+    )
+    # Das Beispielprofil nur beim allerersten Start - wer es loescht, will es nicht zurueck.
+    $profilOrdner = Join-Path (Get-UwhDataDir) 'profiles'
+    if (-not (Test-Path -LiteralPath $profilOrdner)) {
+        $paare += @{ Von = (Get-UwhPath 'templates\beispiel-profil.yaml'); Nach = (Join-Path $profilOrdner 'beispiel.yaml') }
+    }
+
+    foreach ($p in $paare) {
+        if ((Test-Path -LiteralPath $p.Nach) -or -not (Test-Path -LiteralPath $p.Von)) { continue }
+        try {
+            New-Item -ItemType Directory -Path (Split-Path -Parent $p.Nach) -Force | Out-Null
+            Copy-Item -LiteralPath $p.Von -Destination $p.Nach -ErrorAction Stop
+        } catch {
+            Write-UwhLog 'WARN' ("Vorlage nicht angelegt: {0} - {1}" -f $p.Nach, $_.Exception.Message)
+        }
     }
 }
 
@@ -167,7 +194,7 @@ function Get-UwhGit {
     return $script:UwhGitPath
 }
 
-# SSH-Schluessel: erst custom/keys/, dann ~/.ssh/ - wie bei ulh.
+# SSH-Schluessel: erst data\keys\, dann ~/.ssh/ - wie bei ulh (custom/keys/ dort).
 function Resolve-UwhSshKey {
     param([string]$Name)
 
@@ -177,7 +204,7 @@ function Resolve-UwhSshKey {
         if (Test-Path -LiteralPath $Name) { return $Name }
         return $null
     }
-    foreach ($ort in @((Join-Path (Get-UwhCustomDir) 'keys'), (Join-Path $env:USERPROFILE '.ssh'))) {
+    foreach ($ort in @((Join-Path (Get-UwhDataDir) 'keys'), (Join-Path $env:USERPROFILE '.ssh'))) {
         $kandidat = Join-Path $ort $Name
         if (Test-Path -LiteralPath $kandidat) { return $kandidat }
     }

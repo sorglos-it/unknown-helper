@@ -16,7 +16,7 @@ function Get-UwhLocalVersion {
 function Get-UwhRemoteVersion {
     Initialize-UwhTls
     try {
-        $r = Invoke-WebRequest -Uri "$script:UwhRepoRaw/VERSION" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+        $r = Invoke-WebRequest -Uri "$script:UwhRepoRaw/apps/cli/VERSION" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
         return ConvertTo-UwhVersionText $r.Content
     } catch {
         return $null
@@ -46,18 +46,20 @@ function Test-UwhNewer {
     }
 }
 
-# Kopiert den Inhalt von Quelle nach Ziel und laesst 'custom' in Ruhe - dort
-# liegt alles Eigene des Anwenders (Profile, eigene Repos, Schluessel), und
-# eine Aktualisierung darf es nie anfassen. Wie bei ulh.
+# Kopiert den Inhalt von Quelle nach Ziel und laesst das Eigene des Anwenders in
+# Ruhe: apps\cli\data (Profile, eigene Repos, Schluessel) und config\repo.yaml.
+# Beides ist nie im Archiv - der Schutz greift, falls es doch hineingeraet.
+# Skip nimmt Pfade relativ zur Quelle.
 #
 # Copy-Item -Recurse auf einen VORHANDENEN Zielordner legt ihn verschachtelt
-# an ('lib\lib') statt zusammenzufuehren. Deshalb wird hier Datei fuer Datei
+# an ('classes\classes') statt zusammenzufuehren. Deshalb wird hier Datei fuer Datei
 # gegangen und jeder Ordner ausdruecklich angelegt.
 function Copy-UwhTree {
     param(
         [Parameter(Mandatory)][string]$Source,
         [Parameter(Mandatory)][string]$Target,
-        [string[]]$Skip = @('custom')
+        [string[]]$Skip = @('apps\cli\data', 'apps\cli\config\repo.yaml'),
+        [string]$Relativ = ''
     )
 
     if (-not (Test-Path -LiteralPath $Target)) {
@@ -65,11 +67,12 @@ function Copy-UwhTree {
     }
 
     foreach ($item in Get-ChildItem -LiteralPath $Source -Force) {
-        if ($Skip -contains $item.Name) { continue }
+        $rel = if ($Relativ) { Join-Path $Relativ $item.Name } else { $item.Name }
+        if ($Skip -contains $rel) { continue }
         $ziel = Join-Path $Target $item.Name
 
         if ($item.PSIsContainer) {
-            Copy-UwhTree $item.FullName $ziel @()
+            Copy-UwhTree $item.FullName $ziel $Skip $rel
         } else {
             Copy-Item -LiteralPath $item.FullName -Destination $ziel -Force
         }
@@ -79,6 +82,12 @@ function Copy-UwhTree {
 # Liefert $true, wenn aktualisiert wurde und neu gestartet werden soll.
 function Update-Uwh {
     param([switch]$Quiet)
+
+    $stamm = Get-UwhProjectRoot
+    if (-not $stamm) {
+        Write-UwhLog 'INFO' 'uwh liegt nicht in seinem Projektbaum - keine Selbstaktualisierung.'
+        return $false
+    }
 
     $local = Get-UwhLocalVersion
     $remote = Get-UwhRemoteVersion
@@ -100,7 +109,7 @@ function Update-Uwh {
         $source = Get-ChildItem -Path $tmp -Directory | Select-Object -First 1
         if (-not $source) { throw 'Archiv ist leer.' }
 
-        Copy-UwhTree $source.FullName (Get-UwhRoot)
+        Copy-UwhTree $source.FullName $stamm
 
         if (-not $Quiet) { Write-UwhOk "Auf Version $remote aktualisiert." }
         return $true

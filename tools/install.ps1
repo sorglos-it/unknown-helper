@@ -2,16 +2,16 @@
     uwh einrichten.
 
     Einzeiler in PowerShell:
-        irm https://raw.githubusercontent.com/sorglos-it/uwh/main/install.ps1 | iex
+        irm https://raw.githubusercontent.com/sorglos-it/uwh/main/tools/install.ps1 | iex
 
     Es wird kein git gebraucht. uwh landet unter:
         %LOCALAPPDATA%\Programs\uwh
 
     Aus dem eigenen Netz statt aus dem Internet:
-        .\install.ps1 -Quelle \\server\freigabe\uwh-main.zip
+        .\tools\install.ps1 -Quelle \\server\freigabe\uwh-main.zip
 
     Still, ohne Desktop-Verknuepfung und ohne Start:
-        .\install.ps1 -KeineVerknuepfung -KeinStart
+        .\tools\install.ps1 -KeineVerknuepfung -KeinStart
 #>
 [CmdletBinding()]
 param(
@@ -107,20 +107,21 @@ try {
 
     if (-not (Test-Path $Ziel)) { New-Item -ItemType Directory -Path $Ziel -Force | Out-Null }
 
-    # Alles Eigene unter custom/ bleibt bei einer Neuinstallation erhalten.
-    $auslassen = @()
-    if (Test-Path (Join-Path $Ziel 'custom')) { $auslassen = @('custom') }
+    # Alles Eigene bleibt bei einer Neuinstallation erhalten: apps\cli\data und
+    # die eigene Einstellung. Im Archiv ist beides nie, nur config\*.example.
+    $auslassen = @('apps\cli\data', 'apps\cli\config\repo.yaml')
 
     # Copy-Item -Recurse wuerde einen vorhandenen Zielordner verschachteln.
     function Kopiere-Baum {
-        param([string]$Von, [string]$Nach, [string[]]$Aus = @())
+        param([string]$Von, [string]$Nach, [string[]]$Aus = @(), [string]$Rel = '')
         if (-not (Test-Path -LiteralPath $Nach)) {
             New-Item -ItemType Directory -Path $Nach -Force | Out-Null
         }
         foreach ($i in Get-ChildItem -LiteralPath $Von -Force) {
-            if ($Aus -contains $i.Name) { continue }
+            $r = if ($Rel) { Join-Path $Rel $i.Name } else { $i.Name }
+            if ($Aus -contains $r) { continue }
             $z = Join-Path $Nach $i.Name
-            if ($i.PSIsContainer) { Kopiere-Baum $i.FullName $z } 
+            if ($i.PSIsContainer) { Kopiere-Baum $i.FullName $z $Aus $r }
             else { Copy-Item -LiteralPath $i.FullName -Destination $z -Force }
         }
     }
@@ -136,8 +137,8 @@ try {
         $shell = New-Object -ComObject WScript.Shell
         $s = $shell.CreateShortcut($lnk)
         $s.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $s.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $Ziel 'uwh.ps1')
-        $s.WorkingDirectory = $Ziel
+        $s.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $Ziel 'apps\cli\uwh.ps1')
+        $s.WorkingDirectory = (Join-Path $Ziel 'apps\cli')
         $s.IconLocation = 'shell32.dll,165'
         $s.Description = 'uwh - Software auswaehlen und installieren'
         $s.Save()
@@ -152,9 +153,9 @@ try {
         Write-Host '  uwh startet...'
         Write-Host ''
         & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') `
-            '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' (Join-Path $Ziel 'uwh.ps1')
+            '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' (Join-Path $Ziel 'apps\cli\uwh.ps1')
     } else {
-        Write-Host ('  Starten mit:  {0}' -f (Join-Path $Ziel 'uwh.ps1'))
+        Write-Host ('  Starten mit:  {0}' -f (Join-Path $Ziel 'apps\cli\uwh.ps1'))
         Write-Host ''
     }
 } catch {

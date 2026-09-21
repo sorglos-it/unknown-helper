@@ -1,7 +1,8 @@
 ﻿<#
     Vorlage fuer eigene uwh-Skripte.
 
-    So wird ein Skript eingebunden - Eintrag in config.yaml:
+    So wird ein Skript eingebunden - Eintrag in data\eigene\config.yaml,
+    das Skript selbst nach data\eigene\scripts\:
 
       meinskript:
         name: Mein Skript
@@ -23,7 +24,7 @@
       - Rueckgabe 0   = erledigt
       - Rueckgabe 3010 = erledigt, Windows muss neu starten (uwh macht danach weiter)
       - Alles andere  = Fehler
-      - Keine eigenen Abfragen einbauen. Fragen gehoeren in config.yaml,
+      - Keine eigenen Abfragen einbauen. Fragen gehoeren in den Katalog,
         damit uwh sie vorab sammeln und in Profilen speichern kann.
       - Das Skript laeuft in einem eigenen Prozess. Es teilt sich mit uwh
         nichts ausser den Umgebungsvariablen - und kann uwh deshalb auch

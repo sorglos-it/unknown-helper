@@ -27,7 +27,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
 foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
-    . (Join-Path $PSScriptRoot "lib\$lib.ps1")
+    . (Join-Path $PSScriptRoot "classes\$lib.ps1")
 }
 
 $global:UwhVersion = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'VERSION') -Raw).Trim()
@@ -35,6 +35,7 @@ $global:UwhVersion = (Get-Content -LiteralPath (Join-Path $PSScriptRoot 'VERSION
 Initialize-UwhConsole
 Initialize-UwhTls
 if ($StateDir) { Set-UwhStateDir $StateDir }
+Initialize-UwhEigenes
 
 # Sicherheitsnetz: Anwender bekommen eine Meldung, keinen Stapelabzug.
 # Die technischen Einzelheiten stehen im Protokoll.

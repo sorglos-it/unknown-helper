@@ -2,14 +2,14 @@
 # Es wird nichts installiert und nichts neu gestartet - der Neustart wird
 # durch eine Attrappe ersetzt, alles davor und danach laeuft echt.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
-    . (Join-Path $root "lib\$lib.ps1")
+    . (Join-Path $root "classes\$lib.ps1")
 }
 $global:UwhVersion = 'test'
 

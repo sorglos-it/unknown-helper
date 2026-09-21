@@ -1,20 +1,20 @@
-﻿# Prueft eigene Repos: custom/repo.yaml lesen, Kataloge zusammenfuehren,
+﻿# Prueft eigene Repos: config\repo.yaml lesen, Kataloge zusammenfuehren,
 # per git holen und aktualisieren, Zugangsdaten schuetzen.
 #
 # git laeuft echt, aber gegen ein lokales Repo (file:///) - kein Netz noetig.
 # Ohne git werden nur die git-Pruefungen uebersprungen.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\eigene.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\eigene.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
 
 # uwh wird fuer die ganze Pruefung in einen eigenen Ordner umgeleitet.
 $sb = Join-Path $env:TEMP ('uwh-eigene-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
-New-Item -ItemType Directory -Path (Join-Path $sb 'custom') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $sb 'data') -Force | Out-Null
 function Get-UwhRoot { $sb }
 $protokoll = Join-Path $sb 'test.log'
 Set-UwhLogFile $protokoll
@@ -52,7 +52,7 @@ function Schreibe {
 # Ein kleiner uwh mit eigenem Repo
 # ------------------------------------------------------------------
 
-Schreibe 'config.yaml' @(
+Schreibe 'assets\catalog.yaml' @(
     'categories:'
     '  - Grundausstattung'
     '  - Browser'
@@ -71,7 +71,7 @@ Schreibe 'config.yaml' @(
     '    id: Mozilla.Firefox.de'
 )
 
-Schreibe 'custom\eigene\config.yaml' @(
+Schreibe 'data\eigene\config.yaml' @(
     'scripts:'
     '  loxone:'
     '    name: Loxone Config'
@@ -97,14 +97,14 @@ Schreibe 'custom\eigene\config.yaml' @(
     '    file: hallo.ps1'
     '    admin: false'
 )
-Schreibe 'custom\eigene\scripts\hallo.ps1' @('param($Action)', 'exit 0')
+Schreibe 'data\eigene\scripts\hallo.ps1' @('param($Action)', 'exit 0')
 
-Schreibe 'custom\aus\config.yaml' @(
+Schreibe 'data\aus\config.yaml' @(
     'scripts:', '  versteckt:', '    name: X', '    description: X', '    provider: winget', '    id: Nicht.Sichtbar')
 
-Schreibe 'custom\kaputt\config.yaml' @('scripts:', "`tfalsch: eingerueckt")
+Schreibe 'data\kaputt\config.yaml' @('scripts:', "`tfalsch: eingerueckt")
 
-Schreibe 'custom\repo.yaml' @(
+Schreibe 'config\repo.yaml' @(
     'repositories:'
     '  eigene:'
     '    name: Eigene Programme'
@@ -150,7 +150,7 @@ Test-Case 'Fehlender Schalter ist aus' {
 }
 
 Write-Host ''
-Write-Host 'custom/repo.yaml' -ForegroundColor Cyan
+Write-Host 'config\repo.yaml' -ForegroundColor Cyan
 
 $info = Get-UwhRepos
 
@@ -159,7 +159,7 @@ Test-Case 'Gueltige Repos werden gelesen' {
     foreach ($id in @('eigene', 'aus', 'kaputt')) { Assert-True ($ids -contains $id) "Repo '$id'" }
     $e = $info.Repos | Where-Object { $_.Id -eq 'eigene' }
     Assert-True $e.Aktiv 'eigene ist an'
-    Assert-Equal (Join-Path (Join-Path $sb 'custom') 'eigene') $e.Pfad 'liegt unter custom'
+    Assert-Equal (Join-Path (Join-Path $sb 'data') 'eigene') $e.Pfad 'liegt unter data'
 }
 
 Test-Case 'Unsichere Eintraege werden abgelehnt, nicht uebernommen' {
@@ -224,10 +224,30 @@ Test-Case 'Skripte eigener Repos liegen im eigenen scripts-Ordner' {
 }
 
 Test-Case 'Ein leeres eigenes Repo ist kein Fehler' {
-    Schreibe 'custom\leer\config.yaml' @('# noch nichts eingetragen')
-    $t = Read-UwhCatalogFile (Join-Path $sb 'custom\leer\config.yaml') 'leer' 'Leer'
+    Schreibe 'data\leer\config.yaml' @('# noch nichts eingetragen')
+    $t = Read-UwhCatalogFile (Join-Path $sb 'data\leer\config.yaml') 'leer' 'Leer'
     Assert-Equal 0 @($t.Entries).Count 'keine Eintraege'
     Assert-Equal 0 @($t.Problems).Count 'kein Problem'
+}
+
+Test-Case 'Erster Start legt Vorlagen an, ueberschreibt aber nichts' {
+    foreach ($n in @('config\repo.yaml.example', 'templates\eigene.yaml', 'templates\beispiel-profil.yaml')) {
+        $z = Join-Path $sb $n
+        New-Item -ItemType Directory -Path (Split-Path -Parent $z) -Force | Out-Null
+        Copy-Item -LiteralPath (Join-Path $root $n) -Destination $z
+    }
+    $vorher = Get-Content -LiteralPath (Join-Path $sb 'config\repo.yaml') -Raw
+
+    Initialize-UwhEigenes
+
+    Assert-Equal $vorher (Get-Content -LiteralPath (Join-Path $sb 'config\repo.yaml') -Raw) 'repo.yaml unberuehrt'
+    Assert-True ((Get-Content (Join-Path $sb 'data\eigene\config.yaml') -Raw) -like '*Loxone*') 'eigene Programme unberuehrt'
+    Assert-True (Test-Path (Join-Path $sb 'data\profiles\beispiel.yaml')) 'Beispielprofil angelegt'
+
+    # Wer das Beispielprofil loescht, will es nicht zurueck.
+    Remove-Item -LiteralPath (Join-Path $sb 'data\profiles\beispiel.yaml')
+    Initialize-UwhEigenes
+    Assert-True (-not (Test-Path (Join-Path $sb 'data\profiles\beispiel.yaml'))) 'bleibt geloescht'
 }
 
 Write-Host ''
@@ -273,7 +293,7 @@ if (-not $git) {
     Git @('-C', $arbeit, 'remote', 'add', 'origin', $server)
     $url = ([uri]$server).AbsoluteUri
 
-    Schreibe 'custom\repo.yaml' @(
+    Schreibe 'config\repo.yaml' @(
         'repositories:'
         '  fern:'
         '    name: Fern'
@@ -298,13 +318,13 @@ if (-not $git) {
     Sync-UwhRepos -Quiet
 
     Test-Case 'Aktives Repo mit Adresse wird geholt' {
-        Assert-True (Test-Path (Join-Path $sb 'custom\fern\config.yaml')) 'fern geholt'
-        Assert-True (Test-Path (Join-Path $sb 'custom\nur-an\config.yaml')) 'nur-an geholt'
+        Assert-True (Test-Path (Join-Path $sb 'data\fern\config.yaml')) 'fern geholt'
+        Assert-True (Test-Path (Join-Path $sb 'data\nur-an\config.yaml')) 'nur-an geholt'
         Assert-True ($null -ne (Get-UwhEntry (Get-UwhCatalog) 'eins')) 'Eintrag im Katalog'
     }
 
     Test-Case 'Ohne enabled wird nichts geholt' {
-        Assert-True (-not (Test-Path (Join-Path $sb 'custom\nur-aus'))) 'nicht geholt'
+        Assert-True (-not (Test-Path (Join-Path $sb 'data\nur-aus'))) 'nicht geholt'
     }
 
     # Neuer Stand auf dem "Server".
@@ -316,12 +336,12 @@ if (-not $git) {
     Sync-UwhRepos -Quiet
 
     Test-Case 'Mit auto_update wird beim Start aktualisiert' {
-        $text = Get-Content (Join-Path $sb 'custom\fern\config.yaml') -Raw
+        $text = Get-Content (Join-Path $sb 'data\fern\config.yaml') -Raw
         Assert-True ($text -like '*Zwei*') 'neuer Stand da'
     }
 
     Test-Case 'Ohne auto_update bleibt der alte Stand' {
-        $text = Get-Content (Join-Path $sb 'custom\nur-an\config.yaml') -Raw
+        $text = Get-Content (Join-Path $sb 'data\nur-an\config.yaml') -Raw
         Assert-True ($text -notlike '*Zwei*') 'alter Stand'
     }
 
@@ -330,7 +350,7 @@ if (-not $git) {
         $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("${token}:"))
         $repo = [pscustomobject]@{
             Id = 'geheim'; Name = 'Geheim'; Url = $url; Ordner = 'geheim'
-            Pfad = Join-Path $sb 'custom\geheim'; Auth = 'https_token'
+            Pfad = Join-Path $sb 'data\geheim'; Auth = 'https_token'
             SshKey = ''; Token = $token; Benutzer = ''; Kennwort = ''; Aktiv = $true; AutoUpdate = $false
         }
         $r = Invoke-UwhGit $repo @('clone', '--quiet', $url, $repo.Pfad)
@@ -348,7 +368,7 @@ if (-not $git) {
         $env:GIT_CONFIG_COUNT = 'vorher'
         try {
             $repo = [pscustomobject]@{
-                Id = 'x'; Name = 'X'; Url = $url; Ordner = 'x'; Pfad = Join-Path $sb 'custom\x'
+                Id = 'x'; Name = 'X'; Url = $url; Ordner = 'x'; Pfad = Join-Path $sb 'data\x'
                 Auth = 'https_basic'; SshKey = ''; Token = ''; Benutzer = 'nutzer'; Kennwort = 'Kw7x'
                 Aktiv = $true; AutoUpdate = $false
             }

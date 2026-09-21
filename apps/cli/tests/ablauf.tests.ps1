@@ -1,20 +1,28 @@
 ﻿# Prueft die ganze Kette: Katalog, Profil, Plan, Ablauf, Menuezeilen.
 # Es wird nichts installiert - der Provider wird durch eine Attrappe ersetzt.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
 foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
-    . (Join-Path $root "lib\$lib.ps1")
+    . (Join-Path $root "classes\$lib.ps1")
 }
 $global:UwhVersion = 'test'
 
 # Ablage waehrend des Tests in einen eigenen Ordner legen.
 $sandkasten = Join-Path $env:TEMP ('uwh-test-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
 Set-UwhStateDir $sandkasten
+
+# Profile ebenfalls in den Sandkasten, nicht nach data\ der Arbeitskopie.
+# Das Beispielprofil kommt aus der Vorlage - wie beim ersten Start.
+$script:ProfilOrdner = Join-Path $sandkasten 'profiles'
+New-Item -ItemType Directory -Path $script:ProfilOrdner -Force | Out-Null
+Copy-Item -LiteralPath (Join-Path $root 'templates\beispiel-profil.yaml') `
+          -Destination (Join-Path $script:ProfilOrdner 'beispiel.yaml')
+function Get-UwhProfileDir { $script:ProfilOrdner }
 
 $script:Pass = 0
 $script:Fail = 0
@@ -91,7 +99,7 @@ Test-Case 'Keine doppelten Paketkennungen' {
 
 Test-Case 'Skript-Eintraege zeigen auf vorhandene Dateien' {
     foreach ($e in $script:catalog.Entries | Where-Object { $_.Provider -eq 'script' }) {
-        $p = Join-Path (Join-Path $root 'scripts') $e.File
+        $p = Join-Path $e.BaseDir $e.File
         if (-not (Test-Path -LiteralPath $p)) { throw "'$($e.Key)': $($e.File) fehlt" }
     }
 }
@@ -418,35 +426,52 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     $ziel   = Join-Path $sandkasten 'alt'
 
     # So sieht ein frisch entpacktes Archiv aus.
-    New-Item -ItemType Directory -Path (Join-Path $quelle 'lib') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $quelle 'scripts') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $quelle 'custom\profiles') -Force | Out-Null
-    Set-Content (Join-Path $quelle 'VERSION')            '9.9.9'      -Encoding UTF8
-    Set-Content (Join-Path $quelle 'uwh.ps1')            'neu'        -Encoding UTF8
-    Set-Content (Join-Path $quelle 'lib\core.ps1')        'neu'        -Encoding UTF8
-    Set-Content (Join-Path $quelle 'lib\dazu.ps1')        'dazu'       -Encoding UTF8
-    Set-Content (Join-Path $quelle 'scripts\a.ps1')       'neu'        -Encoding UTF8
-    Set-Content (Join-Path $quelle 'custom\profiles\x.yaml') 'aus-archiv' -Encoding UTF8
+    $neuCli = Join-Path $quelle 'apps\cli'
+    foreach ($o in @('classes', 'assets', 'config', 'data\profiles')) {
+        New-Item -ItemType Directory -Path (Join-Path $neuCli $o) -Force | Out-Null
+    }
+    Set-Content (Join-Path $neuCli 'VERSION')              '9.9.9'      -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'uwh.ps1')              'neu'        -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'classes\core.ps1')     'neu'        -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'classes\dazu.ps1')     'dazu'       -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'assets\a.ps1')         'neu'        -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'config\repo.yaml')     'aus-archiv' -Encoding UTF8
+    Set-Content (Join-Path $neuCli 'data\profiles\x.yaml') 'aus-archiv' -Encoding UTF8
 
     # So sieht die vorhandene Installation aus.
-    New-Item -ItemType Directory -Path (Join-Path $ziel 'lib') -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $ziel 'custom\profiles') -Force | Out-Null
-    Set-Content (Join-Path $ziel 'VERSION')                 '0.1.0'  -Encoding UTF8
-    Set-Content (Join-Path $ziel 'uwh.ps1')                 'alt'    -Encoding UTF8
-    Set-Content (Join-Path $ziel 'lib\core.ps1')             'alt'    -Encoding UTF8
-    Set-Content (Join-Path $ziel 'custom\profiles\meins.yaml') 'meins'  -Encoding UTF8
+    $altCli = Join-Path $ziel 'apps\cli'
+    foreach ($o in @('classes', 'config', 'data\profiles')) {
+        New-Item -ItemType Directory -Path (Join-Path $altCli $o) -Force | Out-Null
+    }
+    Set-Content (Join-Path $altCli 'VERSION')                  '0.1.0' -Encoding UTF8
+    Set-Content (Join-Path $altCli 'uwh.ps1')                  'alt'   -Encoding UTF8
+    Set-Content (Join-Path $altCli 'classes\core.ps1')         'alt'   -Encoding UTF8
+    Set-Content (Join-Path $altCli 'config\repo.yaml')         'meins' -Encoding UTF8
+    Set-Content (Join-Path $altCli 'data\profiles\meins.yaml') 'meins' -Encoding UTF8
 
     Copy-UwhTree $quelle $ziel
 
-    Assert-True (-not (Test-Path (Join-Path $ziel 'lib\lib'))) 'kein verschachtelter lib-Ordner'
-    Assert-Equal 'neu'   (Get-Content (Join-Path $ziel 'lib\core.ps1') -Raw).Trim()  'Datei ersetzt'
-    Assert-Equal 'dazu'  (Get-Content (Join-Path $ziel 'lib\dazu.ps1') -Raw).Trim()  'neue Datei dazugekommen'
-    Assert-Equal '9.9.9' (Get-Content (Join-Path $ziel 'VERSION') -Raw).Trim()      'VERSION ersetzt'
-    Assert-True (Test-Path (Join-Path $ziel 'scripts\a.ps1')) 'fehlender Ordner angelegt'
+    Assert-True (-not (Test-Path (Join-Path $altCli 'classes\classes'))) 'kein verschachtelter Ordner'
+    Assert-Equal 'neu'   (Get-Content (Join-Path $altCli 'classes\core.ps1') -Raw).Trim() 'Datei ersetzt'
+    Assert-Equal 'dazu'  (Get-Content (Join-Path $altCli 'classes\dazu.ps1') -Raw).Trim() 'neue Datei dazugekommen'
+    Assert-Equal '9.9.9' (Get-Content (Join-Path $altCli 'VERSION') -Raw).Trim()          'VERSION ersetzt'
+    Assert-True (Test-Path (Join-Path $altCli 'assets\a.ps1')) 'fehlender Ordner angelegt'
 
-    # Das Wichtigste: eigene Profile ueberleben die Aktualisierung.
-    Assert-Equal 'meins' (Get-Content (Join-Path $ziel 'custom\profiles\meins.yaml') -Raw).Trim() 'eigenes Profil unberuehrt'
-    Assert-True (-not (Test-Path (Join-Path $ziel 'custom\profiles\x.yaml'))) 'Profile aus dem Archiv nicht uebernommen'
+    # Das Wichtigste: Eigenes ueberlebt die Aktualisierung - auch wenn ein
+    # Archiv versehentlich etwas an dieser Stelle mitbringt.
+    Assert-Equal 'meins' (Get-Content (Join-Path $altCli 'data\profiles\meins.yaml') -Raw).Trim() 'eigenes Profil unberuehrt'
+    Assert-True (-not (Test-Path (Join-Path $altCli 'data\profiles\x.yaml'))) 'Profile aus dem Archiv nicht uebernommen'
+    Assert-Equal 'meins' (Get-Content (Join-Path $altCli 'config\repo.yaml') -Raw).Trim() 'eigene Einstellungen unberuehrt'
+}
+
+Test-Case 'Ohne Projektbaum drumherum aktualisiert sich uwh nicht' {
+    # Wer nur apps\cli irgendwohin kopiert hat, bekaeme sonst den ganzen
+    # Projektbaum in einen fremden Ordner gekippt.
+    Assert-Equal (Split-Path -Parent (Split-Path -Parent $root)) (Get-UwhProjectRoot) 'Stamm der Arbeitskopie'
+    $lose = Join-Path $sandkasten 'woanders\uwh'
+    function Get-UwhRoot { $lose }
+    Assert-True ($null -eq (Get-UwhProjectRoot)) 'kein Stamm erkannt'
+    Assert-True (-not (Update-Uwh -Quiet)) 'keine Aktualisierung'
 }
 
 Test-Case 'Antworten liegen nicht im Klartext auf der Platte' {

@@ -1,8 +1,9 @@
 # Eigene Repos fuer uwh - aufgebaut wie custom/repo.yaml bei ulh.
 #
-# Alles unter custom/ gehoert dir. Die Aktualisierung von uwh fasst diesen
-# Ordner nie an. Jedes Repo ist ein Ordner unter custom/ mit eigener
-# config.yaml (Aufbau wie die config.yaml von uwh) und eigenem scripts/.
+# Diese Vorlage legt uwh beim ersten Start als config\repo.yaml an - dort
+# aendern, nicht hier. config\ und data\ gehoeren dir, die Aktualisierung
+# von uwh fasst sie nie an. Jedes Repo ist ein Ordner unter data\ mit eigener
+# config.yaml (Aufbau wie der Katalog von uwh) und eigenem scripts\.
 #
 # Schalter wirken durch blosses Dasein - wie bei ulh:
 #   enabled:       im Menue zeigen; fehlt der Ordner und steht eine url da,
@@ -14,12 +15,12 @@
 # Aus dem Netz geht es nur, wenn git installiert ist. Kein git: lokal geht immer.
 #
 # Zugangsdaten nie hier eintragen, sondern als Umgebungsvariable: ${NAME}.
-# SSH-Schluessel gehoeren nach custom/keys/.
+# SSH-Schluessel gehoeren nach data\keys\.
 
 repositories:
 
   # Fuer eigene Programme ohne eigenes Repo: einfach in
-  # custom/eigene/config.yaml eintragen.
+  # data\eigene\config.yaml eintragen.
   eigene:
     name: Eigene Programme
     url: ""

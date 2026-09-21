@@ -1,8 +1,8 @@
 ﻿# Pruefungen, die Internet brauchen: gibt es jede Paketkennung aus
-# config.yaml wirklich, und haelt der Direkt-Download seine Zusagen.
+# assets\catalog.yaml wirklich, und haelt der Direkt-Download seine Zusagen.
 # Dauert ein bis zwei Minuten.
 #
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1
 #
 # Immer laufen lassen, wenn dem Katalog etwas hinzugefuegt wurde.
 # Paketkennungen aendern sich: Hersteller benennen um, Pakete verschwinden.
@@ -11,7 +11,7 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "lib\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
 Set-UwhLogFile (Join-Path $env:TEMP 'uwh-online.log')
 
 $exe = Get-UwhWinget

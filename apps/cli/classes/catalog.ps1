@@ -12,14 +12,14 @@ $script:UwhProviderActions = @{
     script     = @('install')
 }
 
-# Ohne Pfad: der Katalog von uwh plus die Kataloge aller aktiven eigenen Repos
-# unter custom/. Mit Pfad: nur diese eine Datei (fuer Pruefungen).
+# Ohne Pfad: der Katalog von uwh (assets\catalog.yaml) plus die Kataloge aller
+# aktiven eigenen Repos unter data\. Mit Pfad: nur diese eine Datei (fuer Pruefungen).
 function Get-UwhCatalog {
     param([string]$Path)
 
     if ($Path) { return Read-UwhCatalogFile $Path }
 
-    $haupt = Read-UwhCatalogFile (Get-UwhPath 'config.yaml')
+    $haupt = Read-UwhCatalogFile (Get-UwhPath 'assets\catalog.yaml')
 
     $eintraege = [ordered]@{}
     foreach ($e in $haupt.Entries) { $eintraege[$e.Key] = $e }
@@ -137,6 +137,7 @@ function ConvertTo-UwhEntry {
     if ($provider -eq 'script') {
         if (-not $file) { throw "Feld 'file' fehlt fuer provider 'script'." }
         if ($file -match '[\\/]|\.\.') { throw "Dateiname '$file' darf keinen Pfad enthalten." }
+        if ($file -notmatch '\.ps1$') { throw "Dateiname '$file' muss auf .ps1 enden." }
     }
 
     $actions = Get-UwhActions $Data $provider

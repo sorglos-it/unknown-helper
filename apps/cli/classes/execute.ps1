@@ -10,7 +10,9 @@ $script:UwhStateDir = $null
 
 function Get-UwhStateDir {
     if ($script:UwhStateDir) { return $script:UwhStateDir }
-    $script:UwhStateDir = Join-Path $env:LOCALAPPDATA 'uwh'
+    # Zwischenstand und Protokolle sind Laufzeitdaten - sie gehoeren nach data\,
+    # neben das Programm, nicht in AppData. So bleibt uwh portabel.
+    $script:UwhStateDir = Get-UwhPath 'data'
     return $script:UwhStateDir
 }
 

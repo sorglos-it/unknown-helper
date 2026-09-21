@@ -1,10 +1,10 @@
 ﻿# Pruefung des YAML-Lesers und -Schreibers.
-# Aufruf:  powershell -ExecutionPolicy Bypass -File tests\yaml.tests.ps1
+# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\yaml.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot '..\lib\yaml.ps1')
+. (Join-Path $PSScriptRoot '..\classes\yaml.ps1')
 
 $script:Pass = 0
 $script:Fail = 0

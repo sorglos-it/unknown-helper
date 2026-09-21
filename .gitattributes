@@ -6,6 +6,9 @@
 *.yaml text eol=crlf
 *.md   text eol=crlf
 
+# Vorlagen wie repo.yaml.example werden im Editor geoeffnet.
+*.example text eol=crlf
+
 VERSION text eol=lf
 
 # cmd.exe braucht CRLF, sonst stolpert es ueber Zeilenenden.

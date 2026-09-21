@@ -8,7 +8,7 @@
 #   capability  Optionale Windows-Komponente               id: Komponentenname
 #   url         Direkter Download von einer https-Adresse  url:, args:, sha256:
 #   psmodule    PowerShell-Modul                           id: Modulname
-#   script      Eigenes Skript in scripts/                 file: name.ps1
+#   script      Skript neben dieser Datei                  file: name.ps1
 #
 # Weitere Felder:
 #   name         Anzeigename im Menue
@@ -26,9 +26,9 @@
 #
 # EIGENE PROGRAMME NICHT HIER EINTRAGEN. Diese Datei wird bei jeder
 # Aktualisierung von uwh ersetzt. Eigenes gehoert nach
-# custom\eigene\config.yaml - oder in ein eigenes Repo, siehe custom\repo.yaml.
+# data\eigene\config.yaml - oder in ein eigenes Repo, siehe config\repo.yaml.
 #
-# Wer an dieser Datei hier arbeitet, prueft danach beides:
+# Wer an dieser Datei hier arbeitet, prueft danach beides (aus apps\cli\):
 #   .\uwh.ps1 -Doctor                                      Aufbau
 #   powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1   gibt es das Paket?
 # Paketkennungen veralten - beim Aufbau waren 5 von 46 falsch.
@@ -448,7 +448,7 @@ scripts:
     id: OpenSSH.Server~~~~0.0.1.0
 
   # ----------------------------------------------------------------
-  # Windows-Einstellungen (eigene Skripte in scripts/)
+  # Windows-Einstellungen (Skripte liegen neben dieser Datei)
   # ----------------------------------------------------------------
 
   explorer:

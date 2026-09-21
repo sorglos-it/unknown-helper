@@ -337,7 +337,12 @@ function Invoke-UwhPsModule {
 function Invoke-UwhScript {
     param($Entry, [string]$Action, [hashtable]$Answers)
 
-    $path = Join-Path (Join-Path $Entry.BaseDir 'scripts') $Entry.File
+    # Eingebaute Skripte liegen neben dem Katalog (assets\), eigene Repos haben
+    # ein scripts\ - wie bei ulh wird an beiden Stellen gesucht.
+    $path = Join-Path $Entry.BaseDir $Entry.File
+    if (-not (Test-Path -LiteralPath $path)) {
+        $path = Join-Path (Join-Path $Entry.BaseDir 'scripts') $Entry.File
+    }
     if (-not (Test-Path -LiteralPath $path)) {
         return New-UwhResult 'fehler' "Skript nicht gefunden: $($Entry.File)"
     }

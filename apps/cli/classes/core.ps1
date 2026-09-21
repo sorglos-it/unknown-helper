@@ -16,6 +16,17 @@ function Get-UwhPath {
     Join-Path (Get-UwhRoot) $Relative
 }
 
+# Der Projektstamm liegt zwei Ebenen ueber dem Programm: <stamm>\apps\cli.
+# Ist uwh nicht so eingebettet - jemand hat nur apps\cli woandershin kopiert -,
+# kommt nichts zurueck. Die Selbstaktualisierung schreibt dann nirgendwohin,
+# statt den ganzen Projektbaum in einen fremden Ordner zu kippen.
+function Get-UwhProjectRoot {
+    $programm = Get-UwhRoot
+    $apps = Split-Path -Parent $programm
+    if ((Split-Path -Leaf $programm) -ne 'cli' -or (Split-Path -Leaf $apps) -ne 'apps') { return $null }
+    return (Split-Path -Parent $apps)
+}
+
 # ------------------------------------------------------------------
 # Ausgabe
 # ------------------------------------------------------------------
