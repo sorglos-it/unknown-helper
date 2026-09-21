@@ -96,12 +96,15 @@ scripts:
   # Browser
   # ----------------------------------------------------------------
 
+  # Mozilla fuehrt jede Sprache als eigenes Paket. Ohne '.de' kommt Englisch,
+  # und --locale hilft nicht: das ist bei winget ein harter Filter, der
+  # Pakete ohne passenden Installer ganz scheitern laesst.
   firefox:
     name: Mozilla Firefox
     description: Webbrowser
     category: Browser
     provider: winget
-    id: Mozilla.Firefox
+    id: Mozilla.Firefox.de
     recommended: true
 
   chrome:
@@ -335,7 +338,7 @@ scripts:
     description: E-Mail-Programm
     category: Kommunikation
     provider: winget
-    id: Mozilla.Thunderbird
+    id: Mozilla.Thunderbird.de
 
   discord:
     name: Discord
