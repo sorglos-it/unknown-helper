@@ -39,7 +39,7 @@ function ConvertTo-UwhYamlLines {
     $no = 0
     foreach ($raw in ($Text -split "`r?`n")) {
         $no++
-        if ($raw -match "`t") {
+        if ($raw.IndexOf("`t") -ge 0) {
             throw (T 'yaml.tab' $no)
         }
         $line = Remove-UwhYamlComment $raw
@@ -62,6 +62,9 @@ function ConvertTo-UwhYamlLines {
 # Entfernt ' # Kommentar', achtet dabei auf Anfuehrungszeichen.
 function Remove-UwhYamlComment {
     param([string]$Line)
+
+    # Die meisten Zeilen haben gar keine Raute - dann gibt es nichts zu tun.
+    if ($Line.IndexOf('#') -lt 0) { return $Line }
 
     $inSingle = $false
     $inDouble = $false
@@ -150,6 +153,18 @@ function Test-UwhYamlMapLine {
 function Get-UwhYamlKeySplit {
     param([string]$Text)
 
+    # Ohne Anfuehrungszeichen reicht die Suche nach dem ersten ': ' - Zeichen
+    # fuer Zeichen durchzugehen kostet in PowerShell 5.1 spuerbar Zeit.
+    if ($Text.IndexOf("'") -lt 0 -and $Text.IndexOf('"') -lt 0) {
+        $i = $Text.IndexOf(': ')
+        if ($i -lt 0 -and $Text.EndsWith(':')) { $i = $Text.Length - 1 }
+        if ($i -lt 0) { return $null }
+        return [pscustomobject]@{
+            Key   = $Text.Substring(0, $i).Trim()
+            Value = $Text.Substring([Math]::Min($i + 1, $Text.Length)).Trim()
+        }
+    }
+
     $inSingle = $false
     $inDouble = $false
     for ($i = 0; $i -lt $Text.Length; $i++) {
@@ -212,7 +227,12 @@ function Remove-UwhYamlQuotes {
     if ($Text.Length -ge 2) {
         if ($Text.StartsWith('"') -and $Text.EndsWith('"')) {
             $inner = $Text.Substring(1, $Text.Length - 2)
-            return $inner.Replace('\"', '"').Replace('\n', "`n").Replace('\\', '\')
+            # In einem Durchgang - nacheinander ersetzt, wuerde aus \\nas (Backslash,
+            # Backslash, n) ein Zeilenumbruch.
+            return [regex]::Replace($inner, '\\(["\\n])', {
+                param($m)
+                if ($m.Groups[1].Value -eq 'n') { "`n" } else { $m.Groups[1].Value }
+            })
         }
         if ($Text.StartsWith("'") -and $Text.EndsWith("'")) {
             return $Text.Substring(1, $Text.Length - 2).Replace("''", "'")
@@ -326,8 +346,11 @@ function Format-UwhYamlScalar {
 
     $s = [string]$Value
     if ($s -eq '') { return '""' }
-    if ($s -match '^[A-Za-z0-9][A-Za-z0-9 ._@/\\:+\-]*$' -and $s -notmatch '\s$') { return $s }
-    return '"' + $s.Replace('\', '\\').Replace('"', '\"') + '"'
+    # Was wie Zahl, Wahrheitswert oder "nichts" aussieht, kaeme als solches
+    # zurueck: aus der Postleitzahl 01067 wuerde 1067. Also in Anfuehrungszeichen.
+    $mehrdeutig = ($s -match '^-?\d+(\.\d+)?$') -or ($s -match '^(true|false|null|~)$')
+    if (-not $mehrdeutig -and $s -match '^[A-Za-z0-9][A-Za-z0-9 ._@/\\:+\-]*$' -and $s -notmatch '\s$') { return $s }
+    return '"' + $s.Replace('\', '\\').Replace('"', '\"').Replace("`r", '').Replace("`n", '\n') + '"'
 }
 
 function Export-UwhYaml {

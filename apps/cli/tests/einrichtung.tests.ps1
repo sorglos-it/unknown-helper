@@ -134,6 +134,17 @@ Test-Case 'install.ps1 ist reines ASCII ohne BOM - sonst scheitert irm | iex' {
     Assert-Equal 0 $fremd 'Zeichen ausserhalb von ASCII'
 }
 
+Test-Case 'Ueber irm | iex schliesst ein Fehler das Fenster nicht' {
+    # Wie der Einzeiler: der Text laeuft in der Sitzung des Anwenders. Ein Host,
+    # den es nicht gibt, laesst die Einrichtung sicher scheitern.
+    $text = (Get-Content -LiteralPath (Join-Path $stamm 'tools\install.ps1') -Raw).Replace(
+        'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/main', 'https://gibtesnicht.invalid/uwh.zip')
+    $kopie = Join-Path $sandkasten 'install-iex.ps1'
+    [IO.File]::WriteAllText($kopie, $text)
+    $aus = [string](& $exe -NoProfile -Command "Invoke-Expression ([IO.File]::ReadAllText('$kopie')); 'SITZUNG LEBT ' + `$ErrorActionPreference" 2>&1)
+    Assert-True ($aus -like '*SITZUNG LEBT Continue*') 'die Sitzung laeuft weiter und bleibt, wie sie war'
+}
+
 Test-Case 'Ohne -KeineVerknuepfung entstuende eine Verknuepfung' {
     # Nur der Schalter wird geprueft - angelegt wird hier absichtlich keine.
     $text = Get-Content (Join-Path $stamm 'tools\install.ps1') -Raw

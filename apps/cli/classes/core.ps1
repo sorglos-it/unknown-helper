@@ -90,6 +90,30 @@ function Write-UwhErr {
     Write-UwhLog 'ERROR' $Message
 }
 
+# Ob jemand vor dem Fenster sitzt. Umgeleitete Ein- oder Ausgabe heisst: ein
+# Skript oder eine Pruefung ruft uwh auf - dann wird nie auf eine Taste gewartet.
+function Test-UwhInteractive {
+    try {
+        return ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected -and
+                -not [Console]::IsOutputRedirected)
+    } catch {
+        return $false
+    }
+}
+
+# Mit Fehler beenden - vorher auf eine Taste warten. Wer uwh ueber die
+# Verknuepfung startet, saehe das Fenster sonst verschwinden, bevor die
+# Meldung gelesen ist.
+function Exit-Uwh {
+    param([int]$Code, [bool]$Unattended = $false)
+    if ($Code -ne 0 -and -not $Unattended -and (Test-UwhInteractive)) {
+        Write-Host ''
+        Write-Host ('  ' + (T 'run.presskey')) -ForegroundColor DarkGray
+        try { [void][Console]::ReadKey($true) } catch { }
+    }
+    exit $Code
+}
+
 function Write-UwhStep {
     param([string]$Message)
     Write-Host ''
@@ -163,6 +187,15 @@ function Test-UwhOnNetworkDrive {
     return ((Resolve-UwhUncPath $root) -ne $root)
 }
 
+# Start-Process haengt Argumente nur mit Leerzeichen aneinander - ein Pfad wie
+# C:\Users\Max Mustermann\... zerfiele in zwei. Deshalb in Anfuehrungszeichen,
+# so wie Windows eine Befehlszeile wieder zerlegt.
+function Format-UwhArgument {
+    param([AllowEmptyString()][string]$Value)
+    if ($Value -and $Value -notmatch '[\s"]') { return $Value }
+    return '"' + (($Value -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"'
+}
+
 # Startet uwh erhoeht neu und liefert den Exit-Code des Kindprozesses.
 function Invoke-UwhElevated {
     param([Parameter(Mandatory)][string[]]$Arguments)
@@ -171,8 +204,8 @@ function Invoke-UwhElevated {
     $argList = @(
         '-NoProfile'
         '-ExecutionPolicy', 'Bypass'
-        '-File', ('"{0}"' -f $entry)
-    ) + $Arguments
+        '-File', (Format-UwhArgument $entry)
+    ) + @($Arguments | ForEach-Object { Format-UwhArgument $_ })
 
     $proc = Start-Process -FilePath (Get-UwhPowerShellExe) `
                           -ArgumentList $argList `
@@ -196,17 +229,35 @@ function Test-UwhSafeId {
     return ($Value -match '^[A-Za-z0-9][A-Za-z0-9._~+\-]*$')
 }
 
-# Dateinamen fuer Profile: kein Pfadwechsel, keine Sonderzeichen.
+# Kennungen im Katalog und Ordnernamen eigener Repos: kein Pfadwechsel,
+# keine Sonderzeichen.
 function Test-UwhSafeName {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
     return ($Value -match '^[A-Za-z0-9][A-Za-z0-9 _\-]{0,63}$')
 }
 
+# Profilnamen tippen Menschen in ihrer Sprache - Buero, Reunion, Oficina mit
+# Akzent. Buchstaben jeder Sprache sind erlaubt, Pfadzeichen nicht, und keine
+# Namen, die Windows fuer Geraete reserviert (CON, NUL ...).
+function Test-UwhProfileName {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+    if ($Value -match '^(con|prn|aux|nul|com\d|lpt\d)$') { return $false }
+    return ($Value -match '^[\p{L}\p{N}][\p{L}\p{N} _\-]{0,63}$')
+}
+
 function Test-UwhHttpsUrl {
     param([string]$Value)
     if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
     return ($Value -match '^https://[A-Za-z0-9.\-]+(/|$)')
+}
+
+# Ein Direkt-Download braucht immer eine Pruefsumme: sonst liefe, was immer
+# der Server gerade liefert, mit Administratorrechten.
+function Test-UwhSha256 {
+    param([string]$Value)
+    return ($Value -match '^[0-9A-Fa-f]{64}$')
 }
 
 # ------------------------------------------------------------------

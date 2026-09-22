@@ -254,6 +254,26 @@ Test-Case 'Ein unbekanntes Modul meldet einen Fehler' {
     Assert-True ($r.Message -like '*nicht gefunden*') 'Grund weitergereicht'
 }
 
+Test-Case 'Module gehen auch mit dem PowerShellGet von Windows (ohne -AcceptLicense)' {
+    Setze-Lage
+    # So sieht Install-Module in PowerShellGet 1.0.0.1 aus, das Windows mitbringt.
+    function Install-Module {
+        param([string]$Name, [string]$Scope, [switch]$Force, [switch]$AllowClobber, $ErrorAction)
+        $script:Protokoll.Add("install-module:${Name}:$Scope")
+    }
+    $r = Invoke-UwhPsModule (Neuer-Eintrag 'psmodule' 'PSWindowsUpdate') 'install'
+    Assert-Equal 'ok' $r.Status "Status ($($r.Message))"
+    Assert-True ($script:Protokoll -contains 'install-module:PSWindowsUpdate:AllUsers') 'installiert'
+}
+
+Test-Case 'Aktualisieren, was gar nicht installiert ist, ist kein Fehler' {
+    function Get-UwhWinget { 'winget.exe' }
+    function Invoke-UwhExe { param($Exe, $Arguments) [pscustomobject]@{ Code = 1; Output = 'No installed package found' } }
+    $r = Invoke-UwhWinget (Neuer-Eintrag 'winget' 'Gibts.Nicht') 'update'
+    Assert-Equal 'nichts' $r.Status 'Status'
+    Assert-Equal (T 'result.notinstalled') $r.Message 'Grund'
+}
+
 Test-Case 'Eine unbekannte Aktion meldet einen Fehler' {
     Setze-Lage
     $r = Invoke-UwhPsModule (Neuer-Eintrag 'psmodule' 'PSWindowsUpdate') 'reparieren'

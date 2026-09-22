@@ -163,9 +163,19 @@ function Build-UwhRows {
                  Where-Object { @($_.Actions | ForEach-Object { $_.Name }) -contains $Action })
     $rows = New-Object System.Collections.Generic.List[object]
 
+    # In einem Durchgang nach Kategorien sortiert - nicht einmal je Kategorie
+    # ueber alle Eintraege.
+    $nachKategorie = @{}
+    foreach ($e in $entries) {
+        if (-not $nachKategorie.ContainsKey($e.Category)) {
+            $nachKategorie[$e.Category] = New-Object System.Collections.Generic.List[object]
+        }
+        $nachKategorie[$e.Category].Add($e)
+    }
+
     foreach ($cat in $Catalog.Categories) {
-        $inCat = @($entries | Where-Object { $_.Category -eq $cat } | Sort-Object Name)
-        if ($inCat.Count -eq 0) { continue }
+        if (-not $nachKategorie.ContainsKey($cat)) { continue }
+        $inCat = @($nachKategorie[$cat] | Sort-Object Name)
         $rows.Add([pscustomobject]@{ Kind = 'header'; Text = (Get-UwhCategoryName $Catalog $cat); Entry = $null })
         foreach ($e in $inCat) {
             $rows.Add([pscustomobject]@{
@@ -217,19 +227,31 @@ function Format-UwhRow {
 # Hauptmenue: Software auswaehlen
 # ------------------------------------------------------------------
 
+# $Selection ist bewusst kein [hashtable]: die Auswahl des Aufrufers ist
+# geordnet, und [hashtable] machte daraus eine Kopie - alles Angehakte waere
+# nach dem Menue wieder verloren.
 function Show-UwhPicker {
-    param($Catalog, [hashtable]$Selection, [hashtable]$Installed = @{})
+    param($Catalog, [System.Collections.IDictionary]$Selection, [hashtable]$Installed = @{})
 
     $filter = ''
     $cursor = 0
     $top = 0
     $modusNr = 0
+    $gebautFuer = $null
 
     while ($true) {
         Set-UwhWidth
         $modus = Get-UwhModus $modusNr
-        $rows = Build-UwhRows $Catalog $filter $Installed $modus.Name
-        $pick = @(Get-UwhPickIndexes $rows)
+
+        # Die Liste nur neu bauen, wenn sich Suche, Modus oder Sprache geaendert
+        # haben - nicht bei jedem Tastendruck. Mit vielen eigenen Eintraegen
+        # liefe der Cursor sonst hinterher.
+        $liste = '{0}|{1}|{2}' -f $filter, $modus.Name, (Get-UwhLanguage)
+        if ($liste -ne $gebautFuer) {
+            $rows = Build-UwhRows $Catalog $filter $Installed $modus.Name
+            $pick = @(Get-UwhPickIndexes $rows)
+            $gebautFuer = $liste
+        }
 
         $sub = if ($filter) { T 'menu.search' $filter } else { $modus.Frage }
         $head = @(Get-UwhHeader $sub)
@@ -483,5 +505,8 @@ function Show-UwhSummary {
 
     $lines | ForEach-Object { Write-Host $_ }
     Write-Host ''
-    return (Read-UwhConfirm (T 'summary.start') $true)
+    # Wird etwas entfernt, ist Nein die Vorgabe - ein versehentliches ENTER
+    # soll nichts deinstallieren.
+    $entfernt = @($Plan.Items | Where-Object { $_.Action -eq 'uninstall' }).Count -gt 0
+    return (Read-UwhConfirm (T 'summary.start') (-not $entfernt))
 }

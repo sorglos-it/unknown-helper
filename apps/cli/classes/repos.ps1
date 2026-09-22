@@ -333,10 +333,14 @@ function Invoke-UwhRepoMitWiederholung {
         $argumente = @('-c', 'safe.directory=*', '-C', $Repo.Pfad, 'pull', '--ff-only', '--quiet')
     }
 
-    for ($i = 1; $i -le $Einstellungen.Versuche; $i++) {
+    # Wiederholt wird nur das erste Holen. Aktualisieren darf scheitern - der
+    # vorhandene Stand bleibt nutzbar, und ohne Netz kostete sonst jeder Start
+    # Versuche mal Pause, bei den Standardwerten 10 Sekunden je Repo.
+    $versuche = if ($Was -eq 'clone') { $Einstellungen.Versuche } else { 1 }
+    for ($i = 1; $i -le $versuche; $i++) {
         $r = Invoke-UwhGit $Repo $argumente
         if ($r.Code -eq 0) { return $true }
-        if ($i -lt $Einstellungen.Versuche -and $Einstellungen.Pause -gt 0) {
+        if ($i -lt $versuche -and $Einstellungen.Pause -gt 0) {
             Start-Sleep -Seconds $Einstellungen.Pause
         }
     }

@@ -12,13 +12,15 @@ function Get-UwhStateDir {
     if ($script:UwhStateDir) { return $script:UwhStateDir }
     # Zwischenstand und Protokolle sind Laufzeitdaten - sie gehoeren nach data\,
     # neben das Programm, nicht in AppData. So bleibt uwh portabel.
-    $script:UwhStateDir = Get-UwhPath 'data'
+    # Gleich als UNC-Pfad: der erhoehte Lauf und die Aufgabe nach dem Neustart
+    # sehen kein Netzlaufwerk wie Z:, und der Pfad steht auch im Zwischenstand.
+    $script:UwhStateDir = Resolve-UwhUncPath (Get-UwhPath 'data')
     return $script:UwhStateDir
 }
 
 function Set-UwhStateDir {
     param([string]$Path)
-    if ($Path) { $script:UwhStateDir = $Path }
+    if ($Path) { $script:UwhStateDir = Resolve-UwhUncPath $Path }
 }
 
 function Get-UwhStateFile {
@@ -59,7 +61,7 @@ function ConvertTo-UwhStateFuerPlatte {
         Unattended = $State.Unattended; ContinueOnError = $State.ContinueOnError
         RebootPolicy = $State.RebootPolicy; Index = $State.Index
         NeedsAdmin = $State.NeedsAdmin; MayReboot = $State.MayReboot
-        LogFile = $State.LogFile; Items = $items
+        LogFile = $State.LogFile; Language = $State.Language; Items = $items
     }
 }
 
@@ -73,10 +75,21 @@ function Import-UwhState {
 
     foreach ($i in $state.Items) {
         $klar = @{}
+        $verloren = $false
         foreach ($p in $i.Answers.PSObject.Properties) {
-            $klar[$p.Name] = Unprotect-UwhText ([string]$p.Value)
+            $roh = [string]$p.Value
+            $klar[$p.Name] = Unprotect-UwhText $roh
+            if ($roh.StartsWith('dpapi:') -and $klar[$p.Name] -eq '') { $verloren = $true }
         }
         $i.Answers = $klar
+
+        # Hat ein anderes Konto die Administratorrechte gegeben, kann es die
+        # Antworten nicht lesen. Mit leeren Werten weiterzumachen hiesse, etwas
+        # falsch einzurichten - der Schritt wird stattdessen gemeldet.
+        if ($verloren -and $i.Status -eq 'offen') {
+            $i.Status = 'fehler'
+            $i.Message = T 'run.lostanswers'
+        }
     }
     return $state
 }
@@ -84,6 +97,28 @@ function Import-UwhState {
 function Remove-UwhState {
     param([string]$Id)
     Remove-Item -LiteralPath (Get-UwhStateFile $Id) -Force -ErrorAction SilentlyContinue
+}
+
+# Jeder Lauf schreibt ein Protokoll, abgebrochene Laeufe lassen ihren
+# Zwischenstand liegen. Aufgehoben werden die letzten 20 Protokolle und
+# Zwischenstaende der letzten 30 Tage - aelteres waechst sonst endlos.
+function Clear-UwhAltlasten {
+    param([int]$Protokolle = 20, [int]$Tage = 30)
+
+    $logs = Join-Path (Get-UwhStateDir) 'logs'
+    if (Test-Path -LiteralPath $logs) {
+        Get-ChildItem -LiteralPath $logs -Filter 'uwh-*.log' -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -Skip $Protokolle |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+
+    $state = Join-Path (Get-UwhStateDir) 'state'
+    if (Test-Path -LiteralPath $state) {
+        $grenze = (Get-Date).AddDays(-$Tage)
+        Get-ChildItem -LiteralPath $state -Filter '*.json' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.LastWriteTime -lt $grenze } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function ConvertTo-UwhHashtable {
@@ -144,7 +179,8 @@ function New-UwhPlan {
         Created         = (Get-Date).ToString('o')
         Unattended      = $Unattended
         ContinueOnError = $ContinueOnError
-        RebootPolicy    = $RebootPolicy
+        RebootPolicy    = ConvertTo-UwhRebootPolicy $RebootPolicy
+        Language        = Get-UwhLanguage
         Index           = 0
         NeedsAdmin      = $needsAdmin
         MayReboot       = $mayReboot
@@ -191,6 +227,9 @@ function Invoke-UwhCollect {
             if ($Plan.Unattended) {
                 if ($preset -eq '') { $preset = $p.Default }
                 if ($preset -eq '' -and $p.Type -ne 'yesno') { $fehlend.Add($p.Variable) }
+                # Ja/Nein kommt beim Skript immer als ja oder nein an - auch still,
+                # wenn im Profil yes, true oder oui steht.
+                if ($p.Type -eq 'yesno') { $preset = if (Test-UwhJa $preset) { 'ja' } else { 'nein' } }
                 $answers[$p.Variable] = $preset
             } else {
                 $answers[$p.Variable] = Read-UwhAnswer $p $preset
@@ -247,6 +286,9 @@ function Invoke-UwhPlan {
         }
 
         if ($entry.Note) { Write-Host "  $($entry.Note)" -ForegroundColor DarkGray }
+        # Waehrenddessen bewegt sich nichts - ohne Hinweis sieht das aus, als
+        # haenge das Fenster, und mancher schliesst es.
+        Write-Host ('  ' + (T 'run.wait')) -ForegroundColor DarkGray
 
         $result = $null
         try {
@@ -294,7 +336,10 @@ function Invoke-UwhReboot {
         Write-Host ''
         Write-UwhWarn (T 'reboot.needed')
         if (-not (Read-UwhConfirm (T 'reboot.ask') $true)) {
-            Write-UwhInfo (T 'reboot.later' $Plan.Id)
+            # Auch dann geht es von allein weiter - nach dem naechsten Neustart,
+            # wann immer der ist. Sonst bliebe der Rest liegen.
+            if (Register-UwhResume $Plan.Id) { Write-UwhInfo (T 'reboot.later') }
+            else { Write-UwhWarn (T 'reboot.noauto' $Plan.Id) }
             return $true
         }
     }

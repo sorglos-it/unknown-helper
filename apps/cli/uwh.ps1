@@ -3,15 +3,15 @@
     uwh - unknown windows helper. Software auswaehlen, installieren, als Profil wiederholen.
 
 .EXAMPLE
-    .\uwh.ps1
+    .\uwh.cmd
     Menue oeffnen und auswaehlen.
 
 .EXAMPLE
-    .\uwh.ps1 -Profile Arbeitsplatz -Unattended
+    .\uwh.cmd -Profile Arbeitsplatz -Unattended
     Gespeichertes Profil ohne Rueckfragen abspielen.
 
 .EXAMPLE
-    .\uwh.ps1 -Language fr
+    .\uwh.cmd -Language fr
     Auf Franzoesisch, egal wie Windows eingestellt ist (de, en, fr, it, es).
 #>
 [CmdletBinding()]
@@ -29,6 +29,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Der Fortschrittsbalken macht Downloads in Windows PowerShell 5.1 bis zu
+# hundertmal langsamer - Installationsprogramme, Aktualisierung, Module.
+$ProgressPreference = 'SilentlyContinue'
 Set-StrictMode -Version 2.0
 
 foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
@@ -49,13 +52,12 @@ trap {
     Write-Host ''
     Write-UwhErr $_.Exception.Message
     Write-UwhLog 'TRAP' ("{0}`n{1}" -f $_.Exception.Message, $_.ScriptStackTrace)
-    Write-Host ''
-    exit 1
+    Exit-Uwh 1 $Unattended
 }
 
 if ($Language -and -not (Test-UwhLanguage $Language)) {
     Write-UwhErr (T 'main.badlang' $Language ((Get-UwhLanguages) -join ', '))
-    exit 2
+    Exit-Uwh 2 $Unattended
 }
 
 # ------------------------------------------------------------------
@@ -170,7 +172,13 @@ function Invoke-UwhRun {
                                          '-Language', (Get-UwhLanguage))
             return $code
         } catch {
+            # Abgelehnt: dann gibt es auch nichts fortzusetzen.
+            Remove-UwhState $Plan.Id
             Write-UwhErr (T 'run.noadmin')
+            if (-not $Plan.Unattended -and (Test-UwhInteractive)) {
+                Write-Host ('  ' + (T 'run.presskey')) -ForegroundColor DarkGray
+                [void][Console]::ReadKey($true)
+            }
             return 2
         }
     }
@@ -199,11 +207,17 @@ function Invoke-UwhRun {
 # ------------------------------------------------------------------
 
 if ($Resume) {
-    if (-not (Test-UwhSafeId $Resume)) { Write-UwhErr (T 'main.badresume'); exit 2 }
+    if (-not (Test-UwhSafeId $Resume)) { Write-UwhErr (T 'main.badresume'); Exit-Uwh 2 }
 
     Unregister-UwhResume $Resume
     $plan = Import-UwhState $Resume
-    if (-not $plan) { Write-UwhErr (T 'main.noresume' $Resume); exit 2 }
+    if (-not $plan) { Write-UwhErr (T 'main.noresume' $Resume); Exit-Uwh 2 }
+
+    # Weiter in der Sprache, in der der Lauf begann - Firefox soll nicht
+    # halb deutsch, halb franzoesisch ankommen.
+    if (-not $Language -and $plan.PSObject.Properties['Language'] -and (Test-UwhLanguage $plan.Language)) {
+        Set-UwhLanguage $plan.Language
+    }
 
     $catalog = Get-UwhCatalog
     exit (Invoke-UwhRun $catalog $plan)
@@ -212,6 +226,8 @@ if ($Resume) {
 # ------------------------------------------------------------------
 # Profil abspielen
 # ------------------------------------------------------------------
+
+Clear-UwhAltlasten
 
 $catalog = Get-UwhCatalog
 if ($catalog.Problems.Count -gt 0) {
@@ -233,8 +249,7 @@ if ($ProfileName) {
             Write-Host ('  ' + (T 'profile.none')) -ForegroundColor DarkGray
             Write-UwhProfileHowto
         }
-        Write-Host ''
-        exit 2
+        Exit-Uwh 2 $Unattended
     }
     $unattended = $Unattended -or [bool]$prof.Options['unattended']
 
@@ -243,7 +258,7 @@ if ($ProfileName) {
                         -ContinueOnError ([bool]$prof.Options['continue_on_error']) `
                         -RebootPolicy ([string]$prof.Options['reboot'])
 
-    if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.emptyprofile'); exit 2 }
+    if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.emptyprofile'); Exit-Uwh 2 $unattended }
 
     Set-UwhLogFile $plan.LogFile
     Invoke-UwhCollect $catalog $plan
@@ -315,30 +330,35 @@ foreach ($key in $selection.Keys) {
 }
 
 $plan = New-UwhPlan $catalog $ordered.ToArray()
-if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.nothing'); exit 2 }
+if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.nothing'); Exit-Uwh 2 }
 
 Set-UwhLogFile $plan.LogFile
 Invoke-UwhCollect $catalog $plan
 
+# Fragt nach einem Namen, bis er passt - oder leer bleibt, dann ohne Profil.
+function Save-UwhProfileFromMenu {
+    param($Plan, $Catalog)
+    while ($true) {
+        $name = Read-UwhInline (T 'main.profilename')
+        if (-not $name) { return }
+        if (-not (Test-UwhProfileName $name)) {
+            Write-UwhErr (T 'profile.badname' $name)
+            Write-Host ('  ' + (T 'profile.namehint')) -ForegroundColor DarkGray
+            continue
+        }
+        try { Write-UwhOk (T 'main.saved' (Save-UwhProfile $name $Plan.Items $Catalog)) }
+        catch { Write-UwhErr $_.Exception.Message }
+        return
+    }
+}
+
 if (-not (Show-UwhSummary $catalog $plan)) {
     Write-Host ''
-    if (Read-UwhConfirm (T 'main.saveafter') $false) {
-        $name = Read-UwhInline (T 'main.profilename')
-        if ($name) {
-            try { Write-UwhOk (T 'main.saved' (Save-UwhProfile $name $plan.Items $catalog)) }
-            catch { Write-UwhErr $_.Exception.Message }
-        }
-    }
+    if (Read-UwhConfirm (T 'main.saveafter') $false) { Save-UwhProfileFromMenu $plan $catalog }
     Write-Host ('  ' + (T 'main.cancelled'))
     exit 0
 }
 
-if (Read-UwhConfirm (T 'main.savebefore') $false) {
-    $name = Read-UwhInline (T 'main.profilename')
-    if ($name) {
-        try { Write-UwhOk (T 'main.saved' (Save-UwhProfile $name $plan.Items $catalog)) }
-        catch { Write-UwhErr $_.Exception.Message }
-    }
-}
+if (Read-UwhConfirm (T 'main.savebefore') $false) { Save-UwhProfileFromMenu $plan $catalog }
 
 exit (Invoke-UwhRun $catalog $plan)

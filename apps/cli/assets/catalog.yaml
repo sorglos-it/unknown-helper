@@ -6,7 +6,7 @@
 #   msstore     App aus dem Microsoft Store                id: Paketkennung
 #   feature     Windows-Funktion (Systemsteuerung)         id: Funktionsname
 #   capability  Optionale Windows-Komponente               id: Komponentenname
-#   url         Direkter Download von einer https-Adresse  url:, args:, sha256:
+#   url         Direkter Download von einer https-Adresse  url:, sha256: (Pflicht), args:
 #   psmodule    PowerShell-Modul                           id: Modulname
 #   script      Skript neben dieser Datei                  file: name.ps1
 #
@@ -39,7 +39,7 @@
 # data\eigene\config.yaml - oder in ein eigenes Repo, siehe config\repo.yaml.
 #
 # Wer an dieser Datei hier arbeitet, prueft danach (aus apps\cli\):
-#   .\uwh.ps1 -Doctor                                      Aufbau
+#   .\uwh.cmd -Doctor                                      Aufbau
 #   powershell -ExecutionPolicy Bypass -File tests\sprache.tests.ps1  alles uebersetzt, passt es?
 #   powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1   gibt es das Paket?
 # Paketkennungen veralten - beim Aufbau waren 5 von 46 falsch.

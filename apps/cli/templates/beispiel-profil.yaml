@@ -1,5 +1,5 @@
 # Beispielprofil. Abspielen mit:
-#   .\uwh.ps1 -Profile beispiel
+#   .\uwh.cmd -Profile beispiel
 #
 # Ein eigenes Profil entsteht am einfachsten so: im Menue auswaehlen,
 # dann bei "Auswahl vorher als Profil speichern?" mit j bestaetigen.

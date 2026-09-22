@@ -14,7 +14,7 @@
 # Eigene Skripte gehoeren nach data\eigene\scripts\ (Vorlage:
 # templates\script-template.ps1 von uwh).
 #
-# Danach pruefen:  .\uwh.ps1 -Doctor
+# Danach pruefen:  .\uwh.cmd -Doctor
 #
 # Beispiel - die Raute am Zeilenanfang entfernen:
 #

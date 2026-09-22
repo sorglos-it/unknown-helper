@@ -321,6 +321,52 @@ function Restart-Computer { param([switch]$Force) $script:Neustarts++ }
 function Register-UwhResume { param([string]$Id) $script:Aufgaben++; return $true }
 function Start-Sleep { param([int]$Seconds) }
 
+Test-Case 'Neustart spaeter: es geht nach dem naechsten Neustart von allein weiter' {
+    Neue-Spur
+    $script:Neustarts = 0
+    $script:Aufgaben = 0
+    function Read-UwhConfirm { param($Question, $Default) return $false }
+    $auswahl = @('neustarter', 'zwei') | ForEach-Object { [pscustomobject]@{ Key = $_; Action = 'install'; Answers = @{} } }
+    $plan = New-UwhPlan $katalog $auswahl -Unattended $false -RebootPolicy 'ask'
+    [void](Invoke-UwhPlan $katalog $plan)
+
+    Assert-Equal 0 $script:Neustarts 'jetzt kein Neustart'
+    Assert-Equal 1 $script:Aufgaben 'Aufgabe fuer die naechste Anmeldung angelegt'
+    Assert-Equal 1 $plan.Index 'der Rest bleibt fuer danach'
+}
+
+Test-Case 'Ja/Nein kommt auch im stillen Lauf als ja oder nein an' {
+    $datei = Join-Path $sandkasten 'janein.yaml'
+    @'
+categories:
+  - Test
+scripts:
+  frage:
+    name: Frage
+    description: Test
+    category: Test
+    provider: script
+    file: spur.ps1
+    admin: false
+    actions:
+      - name: install
+        prompts:
+          - question: Eins?
+            variable: EINS
+            type: yesno
+            default: yes
+          - question: Zwei?
+            variable: ZWEI
+            type: yesno
+'@ | Set-Content -LiteralPath $datei -Encoding UTF8
+    $c = Get-UwhCatalog $datei
+    $auswahl = @([pscustomobject]@{ Key = 'frage'; Action = 'install'; Answers = @{ ZWEI = 'false' } })
+    $plan = New-UwhPlan $c $auswahl -Unattended $true
+    Invoke-UwhCollect $c $plan
+    Assert-Equal 'ja' $plan.Items[0].Answers['EINS'] 'Vorgabe yes'
+    Assert-Equal 'nein' $plan.Items[0].Answers['ZWEI'] 'false aus dem Profil'
+}
+
 Test-Case 'reboot never startet nicht neu und laeuft weiter' {
     Neue-Spur
     $script:Neustarts = 0
@@ -429,6 +475,82 @@ scripts:
     $c = Get-UwhCatalog $datei
     Assert-Equal 0 $c.Entries.Count 'Eintrag verworfen'
     Assert-True ($c.Problems[0] -like '*https*') 'Grund genannt'
+}
+
+Test-Case 'Download ohne Pruefsumme wird abgelehnt - schon im Katalog und beim Ausfuehren' {
+    $datei = Join-Path $sandkasten 'ohnesumme.yaml'
+    @'
+categories:
+  - Test
+scripts:
+  ohnesumme:
+    name: Ohne Summe
+    description: Test
+    category: Test
+    provider: url
+    url: https://example.com/setup.exe
+  kaputtesumme:
+    name: Kaputte Summe
+    description: Test
+    category: Test
+    provider: url
+    url: https://example.com/setup.exe
+    sha256: 1234
+'@ | Set-Content -LiteralPath $datei -Encoding UTF8
+
+    $c = Get-UwhCatalog $datei
+    Assert-Equal 0 $c.Entries.Count 'beide Eintraege verworfen'
+    Assert-Equal 2 $c.Problems.Count 'beide gemeldet'
+    Assert-True ($c.Problems[0] -like '*sha256*') 'Grund genannt'
+
+    # Auch wer den Eintrag von Hand baut, kommt nicht am Download vorbei.
+    $e = [pscustomobject]@{ Key = 'x'; Url = 'https://gibtesnicht.invalid/setup.exe'; Sha256 = '' }
+    $r = Invoke-UwhUrl $e 'install'
+    Assert-Equal 'fehler' $r.Status 'Status'
+    Assert-True ($r.Message -like '*sha256*') 'nichts geladen, Grund genannt'
+}
+
+Test-Case 'Ein Profil setzt nur Variablen, nach denen der Katalog fragt' {
+    # Ein Profil kann von fremden Rechnern kommen - PATH darf es nicht verbiegen.
+    Neue-Spur
+    $env:UWH_NAME = 'p'
+    $pfadVorher = $env:Path
+    $pruefer = Join-Path $sandkasten 'scripts\pruefer.ps1'
+    @'
+[CmdletBinding()]
+param([Parameter(Mandatory)][string]$Action)
+Add-Content -LiteralPath $env:UWH_SPUR -Value ("{0}|{1}|{2}" -f $env:ANTWORT, $env:BOESE, ($env:Path -like '*boese*'))
+exit 0
+'@ | Set-Content -LiteralPath $pruefer -Encoding UTF8
+    $datei = Join-Path $sandkasten 'pruefer.yaml'
+    @'
+categories:
+  - Test
+scripts:
+  pruefer:
+    name: Pruefer
+    description: Test
+    category: Test
+    provider: script
+    file: pruefer.ps1
+    admin: false
+    actions:
+      - name: install
+        prompts:
+          - question: Antwort?
+            variable: ANTWORT
+            type: text
+'@ | Set-Content -LiteralPath $datei -Encoding UTF8
+    $c = Get-UwhCatalog $datei
+    $auswahl = @([pscustomobject]@{ Key = 'pruefer'; Action = 'install'
+                                    Answers = @{ ANTWORT = 'gefragt'; BOESE = 'x'; Path = 'C:\boese' } })
+    $plan = New-UwhPlan $c $auswahl -Unattended $true -RebootPolicy 'never'
+    Invoke-UwhCollect $c $plan
+    [void](Invoke-UwhPlan $c $plan)
+
+    Assert-Equal 'ok' $plan.Items[0].Status 'lief durch'
+    Assert-Equal 'gefragt||False' (@(Lies-Spur)[0]) 'nur die gefragte Antwort kam an'
+    Assert-Equal $pfadVorher $env:Path 'PATH von uwh selbst unveraendert'
 }
 
 Test-Case 'Skriptname mit Pfadwechsel wird abgelehnt' {

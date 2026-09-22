@@ -295,6 +295,22 @@ Test-Case 'Erster Start legt Vorlagen an, ueberschreibt aber nichts' {
     Assert-True (-not (Test-Path (Join-Path $sb 'data\profiles\beispiel.yaml'))) 'bleibt geloescht'
 }
 
+Test-Case 'Nur das erste Holen wird wiederholt - Aktualisieren kostet ohne Netz keine Wartezeit' {
+    $script:GitAufrufe = 0
+    function Get-UwhGit { 'git.exe' }
+    function Invoke-UwhGit { param($Repo, $Argumente) $script:GitAufrufe++; [pscustomobject]@{ Code = 1; Output = '' } }
+    function Start-Sleep { param([int]$Seconds) }
+    $repo = [pscustomobject]@{ Name = 'Test'; Url = 'https://example.com/x.git'; Pfad = Join-Path $sb 'data\x' }
+    $einst = [pscustomobject]@{ BeimStart = $true; Versuche = 3; Pause = 5 }
+
+    [void](Invoke-UwhRepoMitWiederholung $repo 'pull' $einst $true)
+    Assert-Equal 1 $script:GitAufrufe 'Aktualisieren: ein Versuch'
+
+    $script:GitAufrufe = 0
+    [void](Invoke-UwhRepoMitWiederholung $repo 'clone' $einst $true)
+    Assert-Equal 3 $script:GitAufrufe 'Holen: drei Versuche'
+}
+
 Write-Host ''
 Write-Host 'Zugangsdaten' -ForegroundColor Cyan
 
@@ -410,6 +426,10 @@ if (-not $git) {
     }
 
     Test-Case 'Nach dem git-Aufruf ist die Umgebung wie vorher' {
+        # Manche Umgebungen setzen GIT_TERMINAL_PROMPT schon selbst - fuer die
+        # Pruefung muss es vorher weg sein, danach kommt es zurueck.
+        $gitPrompt = $env:GIT_TERMINAL_PROMPT
+        Remove-Item Env:\GIT_TERMINAL_PROMPT -ErrorAction SilentlyContinue
         $env:GIT_CONFIG_COUNT = 'vorher'
         try {
             $repo = [pscustomobject]@{
@@ -423,6 +443,7 @@ if (-not $git) {
             Assert-True ($null -eq $env:GIT_TERMINAL_PROMPT) 'keine Einstellung liegen geblieben'
         } finally {
             Remove-Item Env:\GIT_CONFIG_COUNT -ErrorAction SilentlyContinue
+            if ($null -ne $gitPrompt) { $env:GIT_TERMINAL_PROMPT = $gitPrompt }
         }
     }
 }

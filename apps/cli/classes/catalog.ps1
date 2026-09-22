@@ -142,15 +142,16 @@ function Read-UwhCatalogFile {
     $problems = New-Object System.Collections.Generic.List[string]
 
     $liste = $raw['scripts']
+    $ordner = Split-Path -Parent $Path
     if ($liste -is [System.Collections.IDictionary]) {
         foreach ($key in $liste.Keys) {
             try {
-                $e = ConvertTo-UwhEntry $key $liste[$key] (Split-Path -Parent $Path)
+                $e = ConvertTo-UwhEntry $key $liste[$key] $ordner
                 if (-not $e.Texte.category[''] -and $ersatz['']) {
                     $e.Texte.category = $ersatz.Clone()
                     $e.Category = [string]$ersatz['']
                 }
-                $e | Add-Member -NotePropertyName Quelle -NotePropertyValue $Quelle
+                $e.Quelle = $Quelle
                 $entries.Add($e)
             } catch {
                 $problems.Add(("{0}: {1}" -f $key, $_.Exception.Message))
@@ -200,6 +201,7 @@ function ConvertTo-UwhEntry {
     $url = Get-UwhField $Data 'url'
     if ($provider -eq 'url') {
         if (-not (Test-UwhHttpsUrl $url)) { throw (T 'catalog.badurl') }
+        if (-not (Test-UwhSha256 ([string](Get-UwhField $Data 'sha256')))) { throw (T 'catalog.nosha') }
     }
 
     $file = Get-UwhField $Data 'file'
@@ -250,8 +252,10 @@ function ConvertTo-UwhEntry {
         Recommended = [bool](Get-UwhField $Data 'recommended')
         Note        = ''
         Texte       = $texte
+        Quelle      = 'uwh'
     }
-    Set-UwhEntryLanguage $e (Get-UwhLanguage)
+    # Name, Beschreibung usw. fuellt Set-UwhCatalogLanguage, wenn der ganze
+    # Katalog steht - einmal, nicht je Datei noch einmal.
     return $e
 }
 
@@ -369,14 +373,18 @@ function Get-UwhCategoryName {
 # Zugriff
 # ------------------------------------------------------------------
 
+# Schlichte Schleifen statt Where-Object: das wird in jedem Schritt gebraucht
+# und waere bei vielen eigenen Eintraegen sonst spuerbar langsam.
 function Get-UwhEntry {
     param($Catalog, [string]$Key)
-    $Catalog.Entries | Where-Object { $_.Key -eq $Key } | Select-Object -First 1
+    foreach ($e in $Catalog.Entries) { if ($e.Key -eq $Key) { return $e } }
+    return $null
 }
 
 function Get-UwhAction {
     param($Entry, [string]$Name)
-    $Entry.Actions | Where-Object { $_.Name -eq $Name } | Select-Object -First 1
+    foreach ($a in $Entry.Actions) { if ($a.Name -eq $Name) { return $a } }
+    return $null
 }
 
 # Sucht in dem, was zu sehen ist, und im englischen Grundtext.

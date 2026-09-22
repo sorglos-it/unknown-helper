@@ -10,8 +10,29 @@ function Get-UwhProfileDir {
 
 function Get-UwhProfileFile {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Test-UwhSafeName $Name)) { throw (T 'profile.badname' $Name) }
+    if (-not (Test-UwhProfileName $Name)) { throw (T 'profile.badname' $Name) }
     Join-Path (Get-UwhProfileDir) ($Name + '.yaml')
+}
+
+# Was bei 'reboot' stehen darf: never, ask, auto - und was Menschen sonst so
+# schreiben. Ungefragt neu gestartet wird nur bei klarem Ja: ein Tippfehler
+# darf nie zu einem Neustart ohne Rueckfrage fuehren.
+function ConvertTo-UwhRebootPolicy {
+    param($Value)
+    $v = ([string]$Value).Trim()
+    if ($v -eq 'never' -or $v -eq '0' -or (Test-UwhNein $v)) { return 'never' }
+    if ($v -eq 'auto' -or $v -eq '1' -or (Test-UwhJa $v)) { return 'auto' }
+    return 'ask'
+}
+
+# Schalter wie unattended: echtes Ja oder Nein in jeder Sprache, sonst der Standard.
+function ConvertTo-UwhJaNein {
+    param($Value, [bool]$Default)
+    if ($Value -is [bool]) { return $Value }
+    $v = ([string]$Value).Trim()
+    if ($v -eq '1' -or (Test-UwhJa $v)) { return $true }
+    if ($v -eq '0' -or (Test-UwhNein $v)) { return $false }
+    return $Default
 }
 
 function Get-UwhProfileNames {
@@ -47,6 +68,10 @@ function Import-UwhProfile {
     if ($raw.Contains('options') -and $raw['options']) {
         foreach ($k in $raw['options'].Keys) { $options[$k] = $raw['options'][$k] }
     }
+    # "false" in Anfuehrungszeichen waere sonst wahr, und 'reboot: nein' ein Neustart.
+    $options['unattended'] = ConvertTo-UwhJaNein $options['unattended'] $false
+    $options['continue_on_error'] = ConvertTo-UwhJaNein $options['continue_on_error'] $true
+    $options['reboot'] = ConvertTo-UwhRebootPolicy $options['reboot']
 
     foreach ($item in @(Get-UwhField $raw 'select')) {
         $parsed = ConvertTo-UwhProfileItem $item

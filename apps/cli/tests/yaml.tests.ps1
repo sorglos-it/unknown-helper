@@ -187,6 +187,19 @@ Test-Case 'Schreiben: Sonderzeichen werden geschuetzt' {
     Assert-Equal 'C:\Ein Pfad' $zurueck.pfad 'Pfad mit Leerzeichen'
 }
 
+Test-Case 'Schreiben und wieder lesen: heikle Werte bleiben, wie sie sind' {
+    # Antworten in Profilen: UNC-Pfade, Postleitzahlen, Woerter wie true.
+    $werte = [ordered]@{
+        unc = '\\nas\backup'; klammer = 'D:\Daten\neu (alt)'; plz = '01067'; null7 = '007'
+        wahr = 'true'; nichts = 'null'; zitat = 'a"b'; zeilen = "zwei`nZeilen"; akzent = "Caf$([char]0xE9)"
+    }
+    $zurueck = ConvertFrom-UwhYaml (ConvertTo-UwhYaml $werte)
+    foreach ($k in $werte.Keys) {
+        $v = $zurueck[$k]
+        if (-not ($v -is [string] -and $v -ceq $werte[$k])) { throw "${k}: erwartet '$($werte[$k])', erhalten '$v'" }
+    }
+}
+
 Write-Host ''
 Write-Host ("  {0} bestanden, {1} fehlgeschlagen" -f $script:Pass, $script:Fail) -ForegroundColor $(if ($script:Fail) { 'Red' } else { 'Green' })
 Write-Host ''

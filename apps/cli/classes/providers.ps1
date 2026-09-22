@@ -127,9 +127,12 @@ function Invoke-UwhWinget {
 
             if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
             if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
-            # Steht es noch da, war schlicht nichts zu tun.
-            if (Test-UwhWingetPresent $id $Source) { return New-UwhResult 'nichts' (T 'result.current') }
-            return New-UwhResult 'fehler' (Get-UwhWingetFehler $r)
+            # Steht es noch da, war schlicht nichts zu tun. Ist es gar nicht
+            # installiert, gibt es auch nichts zu aktualisieren - kein Fehler.
+            # Gefragt wird die Bestandsaufnahme vom Start: ein 'winget list' je
+            # Paket kostete beim Aktualisieren von allem eine Sekunde pro Stueck.
+            if ((Get-UwhInstalledIds).ContainsKey($id)) { return New-UwhResult 'nichts' (T 'result.current') }
+            return New-UwhResult 'nichts' (T 'result.notinstalled')
         }
 
         'uninstall' {
@@ -290,6 +293,7 @@ function Invoke-UwhUrl {
 
     if ($Action -ne 'install') { return New-UwhResult 'fehler' (T 'result.badaction' $Action) }
     if (-not (Test-UwhHttpsUrl $Entry.Url)) { return New-UwhResult 'fehler' (T 'result.badurl') }
+    if (-not (Test-UwhSha256 $Entry.Sha256)) { return New-UwhResult 'fehler' (T 'catalog.nosha') }
 
     Initialize-UwhTls
     $ext = [IO.Path]::GetExtension(([uri]$Entry.Url).AbsolutePath)
@@ -299,13 +303,9 @@ function Invoke-UwhUrl {
     try {
         Invoke-WebRequest -Uri $Entry.Url -OutFile $target -UseBasicParsing -ErrorAction Stop
 
-        if ($Entry.Sha256) {
-            $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
-            if ($hash -ne $Entry.Sha256.ToUpperInvariant()) {
-                return New-UwhResult 'fehler' (T 'result.checksum')
-            }
-        } else {
-            Write-UwhLog 'WARN' "$($Entry.Key): ohne sha256 geladen."
+        $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
+        if ($hash -ne $Entry.Sha256.ToUpperInvariant()) {
+            return New-UwhResult 'fehler' (T 'result.checksum')
         }
 
         $silent = $Entry.SilentArgs
@@ -335,20 +335,25 @@ function Invoke-UwhPsModule {
     param($Entry, [string]$Action)
 
     Initialize-UwhTls
+    # Ohne Administratorrechte (scope: user) geht auch NuGet nur fuer den Benutzer.
+    $scope = if ($Entry.Scope -eq 'user') { 'CurrentUser' } else { 'AllUsers' }
     try {
         if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
-            Install-PackageProvider -Name NuGet -Force -Scope AllUsers -ErrorAction Stop | Out-Null
+            Install-PackageProvider -Name NuGet -Force -Scope $scope -ErrorAction Stop | Out-Null
         }
     } catch {
         return New-UwhResult 'fehler' (T 'result.nuget' $_.Exception.Message)
     }
 
-    $scope = if ($Entry.Scope -eq 'user') { 'CurrentUser' } else { 'AllUsers' }
     try {
         switch ($Action) {
             'install' {
                 if (Get-Module -ListAvailable -Name $Entry.Id) { return New-UwhResult 'nichts' (T 'result.present') }
-                Install-Module -Name $Entry.Id -Scope $scope -Force -AcceptLicense -AllowClobber -ErrorAction Stop
+                # Das PowerShellGet, das Windows mitbringt (1.0.0.1), kennt
+                # -AcceptLicense noch nicht - dann ginge gar keine Installation.
+                $extra = @{}
+                if ((Get-Command Install-Module).Parameters.ContainsKey('AcceptLicense')) { $extra['AcceptLicense'] = $true }
+                Install-Module -Name $Entry.Id -Scope $scope -Force -AllowClobber -ErrorAction Stop @extra
             }
             'update'    { Update-Module -Name $Entry.Id -Force -ErrorAction Stop }
             'uninstall' { Uninstall-Module -Name $Entry.Id -AllVersions -Force -ErrorAction Stop }
@@ -380,8 +385,17 @@ function Invoke-UwhScript {
     # Eigene Skripte laufen in einem eigenen Prozess. Sonst koennte ein fremdes
     # Skript uwh-Funktionen ueberschreiben oder die Sitzung durcheinanderbringen.
     # Antworten werden ueber die Umgebung vererbt, die Sprache in UWH_LANG.
+    #
+    # Weitergegeben wird nur, wonach der Katalog fuer diese Aktion fragt. Ein
+    # Profil kommt womoeglich von fremden Rechnern und koennte sonst beliebige
+    # Variablen setzen - PATH etwa, fuer ein Skript mit Administratorrechten.
+    $gefragt = @{}
+    $aktion = Get-UwhAction $Entry $Action
+    if ($aktion) { foreach ($p in $aktion.Prompts) { $gefragt[$p.Variable] = $true } }
     $umgebung = @{}
-    foreach ($k in $Answers.Keys) { $umgebung[$k] = [string]$Answers[$k] }
+    foreach ($k in $Answers.Keys) {
+        if ($gefragt.ContainsKey([string]$k)) { $umgebung[[string]$k] = [string]$Answers[$k] }
+    }
     $umgebung['UWH_LANG'] = Get-UwhLanguage
 
     $saved = @{}

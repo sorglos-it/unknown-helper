@@ -27,7 +27,18 @@ param(
     [switch]$KeineVerknuepfung
 )
 
+# Alles Weitere in einem eigenen Block: ueber irm | iex blieben sonst
+# $ErrorActionPreference = 'Stop' und die Hilfsfunktionen in der PowerShell
+# des Anwenders haengen.
+& {
 $ErrorActionPreference = 'Stop'
+# Ohne Fortschrittsbalken ist der Download in PowerShell 5.1 um ein Vielfaches schneller.
+$ProgressPreference = 'SilentlyContinue'
+
+# Als Datei gestartet endet das Skript mit Rueckgabewert 1. Ueber irm | iex laeuft
+# es aber in der PowerShell des Anwenders - dort wuerde exit das Fenster
+# schliessen, bevor man die Fehlermeldung lesen kann.
+$AlsDatei = [bool]$PSCommandPath
 
 # Alle Texte, eine Tabelle je Sprache. {0} steht fuer einen Wert, etwa einen Pfad.
 $Texte = @{
@@ -224,7 +235,7 @@ Write-Host ''
 
 if ($PSVersionTable.PSVersion.Major -lt 5) {
     Write-Host "  $(Get-Text psAlt)" -ForegroundColor Red
-    exit 1
+    if ($AlsDatei) { exit 1 } else { return }
 }
 
 try {
@@ -316,7 +327,7 @@ try {
         & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') `
             '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' (Join-Path $Ziel 'apps\cli\uwh.ps1')
     } else {
-        Write-Host "  $(Get-Text startenMit (Join-Path $Ziel 'apps\cli\uwh.ps1'))"
+        Write-Host "  $(Get-Text startenMit (Join-Path $Ziel 'apps\cli\uwh.cmd'))"
         Write-Host ''
     }
 } catch {
@@ -327,8 +338,9 @@ try {
     Write-Host ''
     Write-Host "  $(Get-Text technisch $_.Exception.Message)" -ForegroundColor DarkGray
     Write-Host ''
-    exit 1
+    if ($AlsDatei) { exit 1 } else { return }
 } finally {
     Remove-Item -LiteralPath $zipFile -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+}
 }

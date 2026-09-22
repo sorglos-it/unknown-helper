@@ -89,6 +89,12 @@ function Update-Uwh {
         Write-UwhLog 'INFO' 'uwh liegt nicht in seinem Projektbaum - keine Selbstaktualisierung.'
         return $false
     }
+    # Eine git-Arbeitskopie aktualisiert git. Das Archiv darueberzukopieren
+    # wuerde ungesicherte Aenderungen ueberschreiben.
+    if (Test-Path -LiteralPath (Join-Path $stamm '.git')) {
+        Write-UwhLog 'INFO' 'git-Arbeitskopie - keine Selbstaktualisierung.'
+        return $false
+    }
 
     $local = Get-UwhLocalVersion
     $remote = Get-UwhRemoteVersion

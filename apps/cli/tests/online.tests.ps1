@@ -112,7 +112,7 @@ Pruefe 'Falsche Pruefsumme wird abgelehnt' `
        ($r.Status -eq 'fehler' -and $r.Message -like '*Prüfsumme*') "$($r.Status) / $($r.Message)"
 
 # Unerreichbare Adresse: sauberer Fehler statt Absturz.
-$r2 = Invoke-UwhUrl (Neuer-UrlEintrag 'https://gibtesnicht.invalid/setup.exe' '') 'install'
+$r2 = Invoke-UwhUrl (Neuer-UrlEintrag 'https://gibtesnicht.invalid/setup.exe' ('0' * 64)) 'install'
 Pruefe 'Unerreichbare Adresse meldet einen Fehler' ($r2.Status -eq 'fehler') $r2.Status
 
 # Kein https: es darf gar nicht erst geladen werden.

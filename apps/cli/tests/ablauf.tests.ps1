@@ -778,6 +778,168 @@ Test-Case 'Menue: leere Trefferliste bringt nichts durcheinander' {
     Assert-Equal 0 $m.Wahl.Keys.Count 'nichts gewaehlt'
 }
 
+Test-Case 'Menue: was angehakt wird, kommt beim Aufrufer an' {
+    # [hashtable] als Parametertyp machte aus der geordneten Auswahl eine
+    # Kopie - alles Angehakte war nach dem Menue wieder weg.
+    $typ = (Get-Command Show-UwhPicker).Parameters['Selection'].ParameterType
+    Assert-True ($typ -ne [hashtable]) 'Selection ist kein [hashtable]'
+    Assert-True ($typ.IsAssignableFrom([System.Collections.Specialized.OrderedDictionary])) 'die geordnete Auswahl passt ohne Kopie'
+}
+
+# ------------------------------------------------------------------
+# Erhoehter Neustart und Fortsetzen
+# ------------------------------------------------------------------
+
+Test-Case 'Pfade mit Leerzeichen kommen beim erhoehten Neustart heil an' {
+    Assert-Equal 'C:\a' (Format-UwhArgument 'C:\a') 'ohne Leerzeichen unveraendert'
+    Assert-Equal '"C:\Users\Max Mustermann\data"' (Format-UwhArgument 'C:\Users\Max Mustermann\data') 'in Anfuehrungszeichen'
+    Assert-Equal '"C:\a b\\"' (Format-UwhArgument 'C:\a b\') 'Backslash am Ende verdoppelt'
+    Assert-Equal '""' (Format-UwhArgument '') 'leer'
+
+    # So, wie Start-Process es wirklich weitergibt - wie in Invoke-UwhElevated.
+    $ordner = Join-Path $sandkasten 'mit leer'
+    New-Item -ItemType Directory -Path $ordner -Force | Out-Null
+    $echo = Join-Path $ordner 'echo.ps1'
+    Set-Content -LiteralPath $echo -Encoding ASCII -Value 'param([string]$StateDir, [string]$Resume) "[$StateDir][$Resume]"'
+    $aus = Join-Path $sandkasten 'echo.txt'
+    $pfad = Join-Path $ordner 'data'
+    $argumente = @('-NoProfile', '-File', (Format-UwhArgument $echo)) +
+                 @(@('-StateDir', $pfad, '-Resume', 'abc123') | ForEach-Object { Format-UwhArgument $_ })
+    Start-Process -FilePath (Get-UwhPowerShellExe) -ArgumentList $argumente -Wait -NoNewWindow `
+                  -RedirectStandardOutput $aus
+    Assert-Equal "[$pfad][abc123]" (Get-Content -LiteralPath $aus -Raw).Trim() 'beim Kind angekommen'
+}
+
+Test-Case 'Der Zwischenstand liegt auf einem Pfad, den auch der erhoehte Lauf sieht' {
+    $vorher = Get-UwhStateDir
+    try {
+        $netz = @(Get-PSDrive -PSProvider FileSystem | Where-Object { $_.DisplayRoot }) | Select-Object -First 1
+        if ($netz) {
+            Set-UwhStateDir "$($netz.Name):\uwh\data"
+            Assert-True ((Get-UwhStateDir).StartsWith('\\')) "Netzlaufwerk wird UNC: $(Get-UwhStateDir)"
+        }
+        Set-UwhStateDir 'C:\uwh\data'
+        Assert-Equal 'C:\uwh\data' (Get-UwhStateDir) 'lokaler Pfad bleibt'
+    } finally {
+        Set-UwhStateDir $vorher
+    }
+}
+
+Test-Case 'Der Zwischenstand kennt die Sprache des Laufs' {
+    Set-UwhLanguage 'fr'
+    try {
+        $plan = New-UwhPlan $script:catalog @([pscustomobject]@{ Key = '7zip'; Action = 'install'; Answers = @{} }) -Unattended $true
+    } finally {
+        Set-UwhLanguage 'de'
+    }
+    Save-UwhState $plan
+    try {
+        Assert-Equal 'fr' (Import-UwhState $plan.Id).Language 'Sprache gesichert'
+    } finally {
+        Remove-UwhState $plan.Id
+    }
+}
+
+Test-Case 'Unlesbare Antworten fuehren zu einer Meldung, nicht zu leeren Werten' {
+    # So sieht es aus, wenn ein anderes Konto die Administratorrechte gegeben hat.
+    $auswahl = @([pscustomobject]@{ Key = 'explorer'; Action = 'install'; Answers = @{ ENDUNGEN = 'ja' } })
+    $plan = New-UwhPlan $script:catalog $auswahl -Unattended $true
+    Save-UwhState $plan
+    try {
+        $datei = Get-UwhStateFile $plan.Id
+        $text = (Get-Content -LiteralPath $datei -Raw) -replace '"dpapi:[^"]*"', '"dpapi:fremdes-konto"'
+        Set-Content -LiteralPath $datei -Value $text -Encoding UTF8
+
+        $weiter = Import-UwhState $plan.Id
+        Assert-Equal 'fehler' $weiter.Items[0].Status 'Schritt gesperrt'
+        Assert-Equal (T 'run.lostanswers') $weiter.Items[0].Message 'mit Grund'
+    } finally {
+        Remove-UwhState $plan.Id
+    }
+}
+
+Test-Case 'Profiloptionen: ein Tippfehler startet nie ungefragt neu' {
+    foreach ($paar in @(@('never', 'never'), @('nein', 'never'), @('no', 'never'), @($false, 'never'),
+                         @('auto', 'auto'), @('ja', 'auto'), @($true, 'auto'),
+                         @('ask', 'ask'), @('', 'ask'), @($null, 'ask'), @('neustarten!', 'ask'))) {
+        Assert-Equal $paar[1] (ConvertTo-UwhRebootPolicy $paar[0]) "reboot: '$($paar[0])'"
+    }
+    Assert-True (-not (ConvertTo-UwhJaNein 'false' $true)) '"false" in Anfuehrungszeichen ist falsch'
+    Assert-True (-not (ConvertTo-UwhJaNein 'nein' $true)) 'nein ist falsch'
+    Assert-True (ConvertTo-UwhJaNein 'oui' $false) 'oui ist wahr'
+    Assert-True (ConvertTo-UwhJaNein 'quatsch' $true) 'Unsinn: Standard'
+
+    Set-Content -LiteralPath (Get-UwhProfileFile 'testoptionen') -Encoding UTF8 -Value @(
+        'select:', '  - 7zip', 'options:', '  unattended: "false"', '  reboot: nein')
+    try {
+        $p = Import-UwhProfile 'testoptionen'
+        Assert-True ($p.Options['unattended'] -eq $false) 'unattended bleibt aus'
+        Assert-Equal 'never' $p.Options['reboot'] 'reboot: nein heisst nie'
+    } finally {
+        Remove-Item -LiteralPath (Get-UwhProfileFile 'testoptionen') -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Test-Case 'Profilnamen duerfen Umlaute und Akzente haben' {
+    foreach ($gut in @("B$([char]0xFC)ro", "R$([char]0xE9)union", 'Werkstatt 2', 'a_b-c')) {
+        Assert-True (Test-UwhProfileName $gut) "'$gut' erlaubt"
+    }
+    foreach ($boese in @('CON', 'nul', 'lpt1', '..\x', 'a/b', '.versteckt', ' ', '')) {
+        Assert-True (-not (Test-UwhProfileName $boese)) "'$boese' abgelehnt"
+    }
+    $name = "B$([char]0xFC)ro"
+    $datei = Save-UwhProfile $name @([pscustomobject]@{ Key = '7zip'; Action = 'install'; Answers = @{} })
+    try {
+        Assert-Equal 1 (Import-UwhProfile $name).Select.Count 'gespeichert und gelesen'
+    } finally {
+        Remove-Item -LiteralPath $datei -Force -ErrorAction SilentlyContinue
+    }
+}
+
+Test-Case 'Alte Protokolle und liegengebliebene Zwischenstaende werden aufgeraeumt' {
+    $vorher = Get-UwhStateDir
+    $ablage = Join-Path $sandkasten 'aufraeumen'
+    $logs = Join-Path $ablage 'logs'
+    $state = Join-Path $ablage 'state'
+    New-Item -ItemType Directory -Path $logs, $state -Force | Out-Null
+    for ($i = 1; $i -le 25; $i++) {
+        $d = Join-Path $logs ('uwh-{0:D2}.log' -f $i)
+        Set-Content -LiteralPath $d -Value 'x'
+        (Get-Item -LiteralPath $d).LastWriteTime = (Get-Date).AddHours(-$i)
+    }
+    Set-Content -LiteralPath (Join-Path $state 'alt.json') -Value '{}'
+    (Get-Item -LiteralPath (Join-Path $state 'alt.json')).LastWriteTime = (Get-Date).AddDays(-40)
+    Set-Content -LiteralPath (Join-Path $state 'neu.json') -Value '{}'
+    try {
+        Set-UwhStateDir $ablage
+        Clear-UwhAltlasten
+        $rest = @(Get-ChildItem -LiteralPath $logs -File | ForEach-Object { $_.Name } | Sort-Object)
+        Assert-Equal 20 $rest.Count 'die letzten 20 Protokolle bleiben'
+        Assert-True ($rest -contains 'uwh-01.log') 'das neueste bleibt'
+        Assert-True ($rest -notcontains 'uwh-25.log') 'das aelteste geht'
+        Assert-True (-not (Test-Path (Join-Path $state 'alt.json'))) 'alter Zwischenstand weg'
+        Assert-True (Test-Path (Join-Path $state 'neu.json')) 'neuer Zwischenstand bleibt'
+    } finally {
+        Set-UwhStateDir $vorher
+    }
+}
+
+Test-Case 'Eine git-Arbeitskopie ueberschreibt sich nicht selbst' {
+    # Das Archiv ueber eine Arbeitskopie zu kopieren, loeschte ungesicherte Aenderungen.
+    $cli = Join-Path $sandkasten 'arbeitskopie\apps\cli'
+    New-Item -ItemType Directory -Path $cli -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $sandkasten 'arbeitskopie\.git') -Force | Out-Null
+    function Get-UwhRoot { $cli }
+    $log = Join-Path $sandkasten 'update.log'
+    Set-UwhLogFile $log
+    try {
+        Assert-True (-not (Update-Uwh -Quiet)) 'keine Aktualisierung'
+        Assert-True ((Get-Content -LiteralPath $log -Raw) -like '*git-Arbeitskopie*') 'Grund im Protokoll'
+    } finally {
+        Set-UwhLogFile $null
+    }
+}
+
 # ------------------------------------------------------------------
 # Der tatsaechliche Aufruf, nicht nur die Funktionen dahinter
 # ------------------------------------------------------------------
