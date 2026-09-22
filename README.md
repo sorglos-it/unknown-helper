@@ -1,28 +1,34 @@
 # uwh - unknown windows helper
 
-Software für Windows auswählen und in einem Rutsch installieren. Die Auswahl
-lässt sich als Profil speichern und auf dem nächsten Rechner wiederholen.
-Windows-Gegenstück zu [ulh](https://github.com/sorglos-it/ulh).
+[![Platform](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows&logoColor=white)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white)](https://www.paypal.com/donate/?hosted_button_id=6CDEVZGJWTNQQ)
 
-| Ordner | Zweck | Sprache | Start | Build |
+Pick software for Windows and install it in one go. The selection can be
+saved as a profile and repeated on the next PC.
+The Windows counterpart of [ulh](https://github.com/sorglos-it/ulh).
+
+| Folder | Purpose | Language | Start | Build |
 |---|---|---|---|---|
-| `apps/cli` | Software auswählen und installieren | PowerShell 5.1 | `apps\cli\uwh.cmd` | keiner nötig |
+| `apps/cli` | pick and install software | PowerShell 5.1 | `apps\cli\uwh.cmd` | none needed |
 
-## Start in 3 Schritten
+## Start in 3 steps
 
-1. **PowerShell** öffnen: Startmenü, `PowerShell` eintippen, Enter.
-2. Diese Zeile einfügen, Enter:
+1. Open **PowerShell**: Start menu, type `PowerShell`, Enter.
+2. Paste this line, Enter:
    ```powershell
    irm https://raw.githubusercontent.com/sorglos-it/uwh/main/tools/install.ps1 | iex
    ```
-3. Künftig auf dem Desktop **uwh** doppelklicken.
+3. From then on, double-click **uwh** on the desktop.
 
-Schon eine Kopie des Ordners da? Dann reicht ein Doppelklick auf
-**`apps\cli\uwh.cmd`**.
+Already have a copy of the folder? Then a double-click on
+**`apps\cli\uwh.cmd`** is enough.
 
-## Bedienen
+## Usage
 
-```
+The menu is in German:
+
+```text
 +============================================================================+
 |  uwh - unknown windows helper                                      v0.1.0  |
 +============================================================================+
@@ -41,53 +47,59 @@ Schon eine Kopie des Ordners da? Dann reicht ein Doppelklick auf
 +============================================================================+
 ```
 
-| Taste | Wirkung |
+| Key | Action |
 |---|---|
-| Pfeile | auf und ab |
-| Leertaste | an- und abwählen |
-| Enter | weiter |
-| `/` | suchen |
-| `A` | alles an oder ab |
-| `P` | Profil laden |
-| `M` | Installieren → Aktualisieren → Entfernen |
-| Esc | beenden |
+| Arrows | up and down |
+| Space | select and deselect |
+| Enter | continue |
+| `/` | search |
+| `A` | all on or off |
+| `P` | load a profile |
+| `M` | mode: install → update → remove |
+| Esc | quit |
 
-Alle Fragen kommen vorher. Danach läuft alles allein durch, auch über einen
-Neustart hinweg.
+All questions come first. After that everything runs on its own, even across a
+restart.
 
-## Profile
+## Profiles
 
-Nach der Auswahl fragt uwh, ob sie als Profil gespeichert werden soll. Wieder
-abspielen, im Ordner `apps\cli`:
+After the selection, uwh asks whether to save it as a profile. To run a saved
+profile again, e.g. “Office”, in the folder `apps\cli`:
 
 ```powershell
-.\uwh.ps1 -Profile Arbeitsplatz
+.\uwh.ps1 -Profile Office
 ```
 
-Profile liegen in `apps\cli\data\profiles\`. Kennwörter werden nie gespeichert.
+Profiles are stored in `apps\cli\data\profiles\`. Passwords are never saved.
 
-## Eigene Programme
+## Your own programs
 
-In `apps\cli\data\eigene\config.yaml` eintragen — wie, steht oben in der Datei.
-`apps\cli\data\` und `apps\cli\config\` gehören dir: ein Update von uwh fasst
-sie nie an.
+Add them to `apps\cli\data\eigene\config.yaml` — the top of the file says how.
+`apps\cli\data\` and `apps\cli\config\` are yours: an update of uwh never
+touches them.
 
-Mehrere Rechner oder ein Team: eigene Repos per git, eingetragen in
-`apps\cli\config\repo.yaml` — so wie bei ulh.
+Several PCs or a team: your own repos via git, listed in
+`apps\cli\config\repo.yaml` — just like with ulh.
 
-## Wenn etwas nicht geht
+## If something goes wrong
 
-Im Ordner `apps\cli`:
+In the folder `apps\cli`:
 
 ```powershell
 .\uwh.ps1 -Doctor
 ```
 
-Protokolle liegen in `apps\cli\data\logs\`.
+Logs are in `apps\cli\data\logs\`.
 
-Braucht Windows 10 oder 11 und winget (bei Windows 11 dabei, bei Windows 10 als
-„App Installer" im Microsoft Store).
+Needs Windows 10 or 11 and winget (part of Windows 11; on Windows 10 it comes as
+“App Installer” from the Microsoft Store).
 
-## Lizenz
+## Donate via PayPal
 
-MIT
+If uwh saves you time setting up a PC, a donation is very welcome. Thank you!
+
+[![Donate with PayPal](https://img.shields.io/badge/Donate-PayPal-00457C?logo=paypal&logoColor=white&style=for-the-badge)](https://www.paypal.com/donate/?hosted_button_id=6CDEVZGJWTNQQ)
+
+## License
+
+[MIT](LICENSE)
