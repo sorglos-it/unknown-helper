@@ -4,8 +4,12 @@
 # Aktualisierung von uwh nie an - anders als den Katalog von uwh selbst.
 #
 # Aufbau wie im Katalog assets\catalog.yaml, steht dort oben erklaert. 'category'
-# ist hier freiwillig: ohne landet der Eintrag unter "Eigene Programme".
+# ist hier freiwillig: ohne landet der Eintrag unter "Eigene Programme". Die
+# Kategorien von uwh gehen in jeder Sprache: Grundausstattung, Essentials ...
 # Gleicher Name wie ein uwh-Eintrag = deine Fassung ersetzt die von uwh.
+#
+# Texte gelten fuer alle Sprachen. Uebersetzen ist freiwillig - mit Kuerzel
+# DE, EN, ES, IT oder FR hinten dran: description, descriptionEN usw.
 #
 # Eigene Skripte gehoeren nach data\eigene\scripts\ (Vorlage:
 # templates\script-template.ps1 von uwh).
@@ -18,5 +22,7 @@
 #   treesize:
 #     name: TreeSize Free
 #     description: Zeigt, was den Speicher belegt
+#     descriptionEN: Shows what fills the disk
+#     category: Grundausstattung
 #     provider: winget
 #     id: JAMSoftware.TreeSize.Free

@@ -8,10 +8,11 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $root "classes\$lib.ps1")
 }
 $global:UwhVersion = 'test'
+Set-UwhLanguage 'de'
 
 $sandkasten = Join-Path $env:TEMP ('uwh-fort-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path (Join-Path $sandkasten 'scripts') -Force | Out-Null

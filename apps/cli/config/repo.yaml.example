@@ -20,9 +20,14 @@
 repositories:
 
   # Fuer eigene Programme ohne eigenes Repo: einfach in
-  # data\eigene\config.yaml eintragen.
+  # data\eigene\config.yaml eintragen. Den Namen zeigt das Menue als
+  # Kategorie - uebersetzt wie im Katalog mit nameDE, nameES usw.
   eigene:
-    name: Eigene Programme
+    name: My programs
+    nameDE: Eigene Programme
+    nameES: Mis programas
+    nameIT: I miei programmi
+    nameFR: Mes programmes
     url: ""
     path: eigene
     enabled:

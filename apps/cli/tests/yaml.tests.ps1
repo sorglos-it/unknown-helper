@@ -4,7 +4,9 @@
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
-. (Join-Path $PSScriptRoot '..\classes\yaml.ps1')
+# Fehlermeldungen kommen aus den Sprachdateien - dafuer braucht es core und lang.
+foreach ($lib in @('core', 'yaml', 'lang')) { . (Join-Path $PSScriptRoot "..\classes\$lib.ps1") }
+Set-UwhLanguage 'de'
 
 $script:Pass = 0
 $script:Fail = 0

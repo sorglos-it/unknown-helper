@@ -28,7 +28,7 @@ function Import-UwhYaml {
     try {
         return ConvertFrom-UwhYaml $text
     } catch {
-        throw ("Datei '{0}' ist fehlerhaft: {1}" -f (Split-Path -Leaf $Path), $_.Exception.Message)
+        throw (T 'yaml.broken' (Split-Path -Leaf $Path) $_.Exception.Message)
     }
 }
 
@@ -40,7 +40,7 @@ function ConvertTo-UwhYamlLines {
     foreach ($raw in ($Text -split "`r?`n")) {
         $no++
         if ($raw -match "`t") {
-            throw "Zeile $no enthaelt einen Tabulator. YAML erlaubt nur Leerzeichen."
+            throw (T 'yaml.tab' $no)
         }
         $line = Remove-UwhYamlComment $raw
         if ([string]::IsNullOrWhiteSpace($line)) { continue }
@@ -179,7 +179,7 @@ function Read-UwhYamlMap {
 
         $split = Get-UwhYamlKeySplit $line.Text
         if (-not $split) {
-            throw ("Zeile {0}: '{1}' ist kein gueltiger Eintrag." -f $line.Number, $line.Text)
+            throw (T 'yaml.badline' $line.Number $line.Text)
         }
 
         $key = Remove-UwhYamlQuotes $split.Key

@@ -21,6 +21,10 @@
 
     Spielregeln:
       - Antworten kommen als Umgebungsvariablen an: $env:ORDNER
+      - Ja/Nein-Antworten kommen immer als ja oder nein an, egal in welcher
+        Sprache gefragt wurde.
+      - Die Sprache von uwh steht in $env:UWH_LANG (de, en, fr, it, es) - fuer
+        Ausgaben in mehreren Sprachen, Beispiel: assets\explorer.ps1 von uwh.
       - Rueckgabe 0   = erledigt
       - Rueckgabe 3010 = erledigt, Windows muss neu starten (uwh macht danach weiter)
       - Alles andere  = Fehler

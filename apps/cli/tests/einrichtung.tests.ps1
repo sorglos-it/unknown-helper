@@ -54,8 +54,9 @@ function Baue-Archiv {
 
     # Nur, was auch im echten Archiv steckt: keine config\repo.yaml, kein data\.
     $dateien = @('README.md', 'CHANGELOG.md', 'LICENSE', 'tools\install.ps1',
-                 'apps\cli\uwh.ps1', 'apps\cli\uwh.cmd', 'apps\cli\config\repo.yaml.example')
-    foreach ($ordner in @('classes', 'assets', 'templates')) {
+                 'apps\cli\uwh.ps1', 'apps\cli\uwh.cmd', 'apps\cli\config\repo.yaml.example',
+                 'apps\cli\config\settings.yaml.example')
+    foreach ($ordner in @('classes', 'assets', 'templates', 'lang')) {
         foreach ($d in Get-ChildItem -LiteralPath (Join-Path $root $ordner) -File) {
             $dateien += ('apps\cli\{0}\{1}' -f $ordner, $d.Name)
         }
@@ -87,7 +88,10 @@ Test-Case 'Alle Dateien kommen an' {
                      'apps\cli\uwh.ps1', 'apps\cli\uwh.cmd', 'apps\cli\VERSION',
                      'apps\cli\assets\catalog.yaml', 'apps\cli\classes\core.ps1',
                      'apps\cli\classes\menu.ps1', 'apps\cli\classes\update.ps1',
-                     'apps\cli\templates\script-template.ps1', 'apps\cli\config\repo.yaml.example')) {
+                     'apps\cli\templates\script-template.ps1', 'apps\cli\config\repo.yaml.example',
+                     'apps\cli\config\settings.yaml.example', 'apps\cli\classes\lang.ps1',
+                     'apps\cli\lang\de.yaml', 'apps\cli\lang\en.yaml', 'apps\cli\lang\fr.yaml',
+                     'apps\cli\lang\it.yaml', 'apps\cli\lang\es.yaml')) {
         Assert-True (Test-Path (Join-Path $ziel $n)) "Datei '$n'"
     }
 }
@@ -101,6 +105,7 @@ Test-Case 'Keine verschachtelten Ordner' {
 Test-Case 'Eigenes steckt nicht im Archiv' {
     Assert-True (-not (Test-Path (Join-Path $cli 'data')))             'kein data'
     Assert-True (-not (Test-Path (Join-Path $cli 'config\repo.yaml'))) 'keine echte Einstellung'
+    Assert-True (-not (Test-Path (Join-Path $cli 'config\settings.yaml'))) 'keine gemerkte Sprache'
 }
 
 Test-Case 'Die eingerichtete Fassung laeuft' {
@@ -109,7 +114,7 @@ Test-Case 'Die eingerichtete Fassung laeuft' {
 }
 
 Test-Case 'Der erste Start legt die eigenen Dateien aus den Vorlagen an' {
-    foreach ($n in @('config\repo.yaml', 'data\eigene\config.yaml', 'data\profiles\beispiel.yaml')) {
+    foreach ($n in @('config\repo.yaml', 'config\settings.yaml', 'data\eigene\config.yaml', 'data\profiles\beispiel.yaml')) {
         Assert-True (Test-Path (Join-Path $cli $n)) "Datei '$n'"
     }
 }
@@ -117,6 +122,16 @@ Test-Case 'Der erste Start legt die eigenen Dateien aus den Vorlagen an' {
 Test-Case 'Der Katalog ist lesbar' {
     $aus = [string](& $exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $cli 'uwh.ps1') -List -NoUpdate 2>&1)
     Assert-True ($aus -like '*7zip*') 'ein bekannter Eintrag kommt vor'
+}
+
+Test-Case 'install.ps1 ist reines ASCII ohne BOM - sonst scheitert irm | iex' {
+    # GitHub liefert die Datei als UTF-8, irm behaelt ein BOM am Anfang, und
+    # iex bricht daran ab. Ohne BOM liest Windows PowerShell 5.1 aber ANSI -
+    # also darf kein einziges Zeichen ausserhalb von ASCII vorkommen.
+    $bytes = [IO.File]::ReadAllBytes((Join-Path $stamm 'tools\install.ps1'))
+    Assert-True (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) 'kein BOM'
+    $fremd = @($bytes | Where-Object { $_ -gt 127 }).Count
+    Assert-Equal 0 $fremd 'Zeichen ausserhalb von ASCII'
 }
 
 Test-Case 'Ohne -KeineVerknuepfung entstuende eine Verknuepfung' {
@@ -133,10 +148,11 @@ Write-Host ''
 Write-Host 'Selbstaktualisierung' -ForegroundColor Cyan
 
 # Die eingerichtete Fassung laden, nicht die aus dem Arbeitsverzeichnis.
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $cli "classes\$lib.ps1")
 }
 function Get-UwhRoot { $cli }
+Set-UwhLanguage 'de'
 
 # Eigenes Profil - es muss die Aktualisierung ueberstehen.
 Set-Content -Path (Join-Path $cli 'data\profiles\meins.yaml') -Encoding UTF8 -Value @(
@@ -152,8 +168,9 @@ Set-Content -Path (Join-Path $cli 'data\eigene\config.yaml') -Encoding UTF8 -Val
     '    id: Loxone.LoxoneConfig'
 )
 
-# Eigene Einstellung.
+# Eigene Einstellungen, auch die gemerkte Sprache.
 Add-Content -Path (Join-Path $cli 'config\repo.yaml') -Encoding UTF8 -Value '# meine Notiz'
+[void](Save-UwhLanguage 'it')
 
 $neu = Baue-Archiv '0.2.0'
 Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\classes\neu.ps1') -Value '# neu dazugekommen' -Encoding UTF8
@@ -161,6 +178,7 @@ Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\classes\neu.ps1') -Value '# n
 New-Item -ItemType Directory -Path (Join-Path $neu.Ordner 'apps\cli\data\eigene') -Force | Out-Null
 Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\data\eigene\config.yaml') -Value '# leer' -Encoding UTF8
 Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\config\repo.yaml') -Value '# aus dem Archiv' -Encoding UTF8
+Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\config\settings.yaml') -Value 'language: es' -Encoding UTF8
 Compress-Archive -Path $neu.Ordner -DestinationPath $neu.Zip -Force
 
 $script:UwhRepoRaw = ([uri]$neu.Ordner).AbsoluteUri
@@ -192,7 +210,7 @@ Test-Case 'Eigene Programme ueberstehen die Aktualisierung' {
     $c = Get-UwhCatalog
     $e = Get-UwhEntry $c 'loxone'
     Assert-True ($null -ne $e) 'im Katalog enthalten'
-    Assert-Equal 'Eigene Programme' $e.Category 'unter dem Namen des Repos'
+    Assert-Equal 'Eigene Programme' (Get-UwhCategoryName $c $e.Category) 'unter dem Namen des Repos'
     Assert-Equal 'eigene' $e.Quelle 'Herkunft vermerkt'
 }
 
@@ -206,6 +224,7 @@ Test-Case 'Eigene Einstellungen ueberstehen die Aktualisierung' {
     $text = Get-Content (Join-Path $cli 'config\repo.yaml') -Raw
     Assert-True ($text -like '*meine Notiz*')       'eigene Aenderung noch da'
     Assert-True ($text -notlike '*aus dem Archiv*') 'nicht ersetzt'
+    Assert-Equal 'it' (Get-UwhSavedLanguage) 'gemerkte Sprache unberuehrt'
 }
 
 Test-Case 'Auch nach der Aktualisierung keine verschachtelten Ordner' {

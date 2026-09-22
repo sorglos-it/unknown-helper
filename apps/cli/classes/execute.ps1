@@ -118,12 +118,12 @@ function New-UwhPlan {
     foreach ($sel in $Selection) {
         $entry = Get-UwhEntry $Catalog $sel.Key
         if (-not $entry) {
-            Write-UwhWarn "Unbekannter Eintrag '$($sel.Key)' wird uebersprungen."
+            Write-UwhWarn (T 'plan.unknown' $sel.Key)
             continue
         }
         $action = if ($sel.Action) { $sel.Action } else { 'install' }
         if (-not (Get-UwhAction $entry $action)) {
-            Write-UwhWarn "'$($entry.Name)' kennt die Aktion '$action' nicht."
+            Write-UwhWarn (T 'plan.noaction' $entry.Name $action)
             continue
         }
 
@@ -170,9 +170,9 @@ function Invoke-UwhCollect {
     if (-not $Plan.Unattended) {
         Set-UwhWidth
         Clear-Host
-        Get-UwhHeader 'Ein paar Angaben werden gebraucht' | ForEach-Object { Write-Host $_ }
+        Get-UwhHeader (T 'collect.title') | ForEach-Object { Write-Host $_ }
         Write-Host ''
-        Write-Host '  Danach laeuft alles ohne Unterbrechung durch.' -ForegroundColor DarkGray
+        Write-Host ('  ' + (T 'collect.after')) -ForegroundColor DarkGray
         Write-Host ''
     }
 
@@ -204,8 +204,8 @@ function Invoke-UwhCollect {
         # es jemand merkt - also wird der Schritt uebersprungen und gemeldet.
         if ($fehlend.Count -gt 0) {
             $item.Status = 'fehler'
-            $item.Message = 'Keine Angabe fuer: ' + ($fehlend -join ', ')
-            Write-UwhWarn ("{0} wird uebersprungen - {1}" -f $entry.Name, $item.Message)
+            $item.Message = T 'collect.missing' ($fehlend -join ', ')
+            Write-UwhWarn (T 'collect.skipped' $entry.Name $item.Message)
         }
         if (-not $Plan.Unattended) { Write-Host '' }
     }
@@ -229,7 +229,7 @@ function Invoke-UwhPlan {
 
         if (-not $entry) {
             $item.Status = 'fehler'
-            $item.Message = 'Nicht mehr im Katalog'
+            $item.Message = T 'run.gone'
             $Plan.Index++
             Save-UwhState $Plan
             continue
@@ -286,24 +286,24 @@ function Invoke-UwhReboot {
     param($Plan)
 
     if ($Plan.RebootPolicy -eq 'never') {
-        Write-UwhWarn 'Neustart noetig - wird uebersprungen. Bitte spaeter selbst neu starten.'
+        Write-UwhWarn (T 'reboot.skipped')
         return $false
     }
 
     if ($Plan.RebootPolicy -eq 'ask' -and -not $Plan.Unattended) {
         Write-Host ''
-        Write-UwhWarn 'Fuer den naechsten Schritt muss Windows neu starten.'
-        if (-not (Read-UwhConfirm 'Jetzt neu starten und danach automatisch weitermachen?' $true)) {
-            Write-UwhInfo ("Spaeter fortsetzen mit:  uwh.ps1 -Resume {0}" -f $Plan.Id)
+        Write-UwhWarn (T 'reboot.needed')
+        if (-not (Read-UwhConfirm (T 'reboot.ask') $true)) {
+            Write-UwhInfo (T 'reboot.later' $Plan.Id)
             return $true
         }
     }
 
     if (-not (Register-UwhResume $Plan.Id)) {
-        Write-UwhWarn ("Automatische Fortsetzung nicht moeglich. Nach dem Neustart:  uwh.ps1 -Resume {0}" -f $Plan.Id)
+        Write-UwhWarn (T 'reboot.noauto' $Plan.Id)
     }
 
-    Write-UwhInfo 'Windows startet in 10 Sekunden neu...'
+    Write-UwhInfo (T 'reboot.countdown')
     Start-Sleep -Seconds 10
     Restart-Computer -Force
     return $true
@@ -324,8 +324,9 @@ function Register-UwhResume {
     try {
         # Die Aufgabe laeuft erhoeht und sieht deshalb keine Netzlaufwerke.
         $entry = Resolve-UwhUncPath (Get-UwhPath 'uwh.ps1')
-        $argument = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Resume {1} -StateDir "{2}"' -f
-                    $entry, $Id, (Resolve-UwhUncPath (Get-UwhStateDir))
+        # Die Sprache reist mit - nach dem Neustart geht es in derselben weiter.
+        $argument = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Resume {1} -StateDir "{2}" -Language {3}' -f
+                    $entry, $Id, (Resolve-UwhUncPath (Get-UwhStateDir)), (Get-UwhLanguage)
 
         $action = New-ScheduledTaskAction -Execute (Get-UwhPowerShellExe) -Argument $argument
         $trigger = New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME"
@@ -368,14 +369,13 @@ function Show-UwhReport {
 
     Write-Host ''
     Write-Host (New-UwhRule)
-    Write-Host (New-UwhLine ('  Fertig: {0} erledigt, {1} ohne Aenderung, {2} fehlgeschlagen' -f
-                             $ok.Count, $skip.Count, $fail.Count))
-    if ($open.Count -gt 0) { Write-Host (New-UwhLine ('  {0} noch offen' -f $open.Count)) }
+    Write-Host (New-UwhLine ('  ' + (T 'report.done' $ok.Count $skip.Count $fail.Count)))
+    if ($open.Count -gt 0) { Write-Host (New-UwhLine ('  ' + (T 'report.open' $open.Count))) }
     Write-Host (New-UwhRule)
 
     if ($fail.Count -gt 0) {
         Write-Host ''
-        Write-Host '  Nicht geklappt hat:' -ForegroundColor Yellow
+        Write-Host ('  ' + (T 'report.failed')) -ForegroundColor Yellow
         foreach ($f in $fail) {
             $e = Get-UwhEntry $Catalog $f.Key
             $name = if ($e) { $e.Name } else { $f.Key }
@@ -384,7 +384,7 @@ function Show-UwhReport {
     }
 
     Write-Host ''
-    Write-Host ("  Protokoll: {0}" -f $Plan.LogFile) -ForegroundColor DarkGray
+    Write-Host ('  ' + (T 'report.log' $Plan.LogFile)) -ForegroundColor DarkGray
     Write-Host ''
 
     if ($fail.Count -gt 0) { return 1 }

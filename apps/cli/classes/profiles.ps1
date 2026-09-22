@@ -10,7 +10,7 @@ function Get-UwhProfileDir {
 
 function Get-UwhProfileFile {
     param([Parameter(Mandatory)][string]$Name)
-    if (-not (Test-UwhSafeName $Name)) { throw "Profilname '$Name' ist nicht erlaubt." }
+    if (-not (Test-UwhSafeName $Name)) { throw (T 'profile.badname' $Name) }
     Join-Path (Get-UwhProfileDir) ($Name + '.yaml')
 }
 
@@ -26,14 +26,14 @@ function Get-UwhProfileNames {
 function Import-UwhProfile {
     param([Parameter(Mandatory)][string]$Name, [string[]]$Seen = @())
 
-    if ($Seen -contains $Name) { throw "Profil '$Name' verweist im Kreis auf sich selbst." }
-    if ($Seen.Count -ge 5) { throw 'Zu viele verschachtelte Profile.' }
+    if ($Seen -contains $Name) { throw (T 'profile.circle' $Name) }
+    if ($Seen.Count -ge 5) { throw (T 'profile.deep') }
 
     $file = Get-UwhProfileFile $Name
-    if (-not (Test-Path -LiteralPath $file)) { throw "Profil '$Name' gibt es nicht." }
+    if (-not (Test-Path -LiteralPath $file)) { throw (T 'profile.missing' $Name) }
 
     $raw = Import-UwhYaml $file
-    if (-not $raw) { throw "Profil '$Name' ist leer." }
+    if (-not $raw) { throw (T 'profile.empty' $Name) }
 
     $select = New-Object System.Collections.Generic.List[object]
     $options = @{ unattended = $false; continue_on_error = $true; reboot = 'ask' }
@@ -78,7 +78,7 @@ function ConvertTo-UwhProfileItem {
     }
 
     $key = Get-UwhField $Item 'key'
-    if (-not $key) { throw "Eintrag in 'select' ohne 'key'." }
+    if (-not $key) { throw (T 'profile.nokey') }
 
     $action = Get-UwhField $Item 'action'
     if (-not $action) { $action = 'install' }
@@ -161,11 +161,11 @@ function Save-UwhProfile {
     }
 
     $header = @(
-        "uwh-Profil '$Name'"
-        "Erstellt am $(Get-Date -Format 'dd.MM.yyyy HH:mm')"
+        (T 'profile.head' $Name)
+        (T 'profile.created' (Get-Date -Format 'yyyy-MM-dd HH:mm'))
         ''
-        'Abspielen:  uwh.ps1 -Profile ' + $Name
-        'Kennwoerter werden bewusst nicht gespeichert.'
+        (T 'profile.play' $Name)
+        (T 'profile.nopasswords')
     ) -join "`n"
 
     Export-UwhYaml $data $file $header
@@ -182,14 +182,14 @@ function Show-UwhProfilePicker {
     Set-UwhWidth
     $script:UwhLastHeight = 0
     Clear-Host
-    Get-UwhHeader 'Profil laden' | ForEach-Object { Write-Host $_ }
+    Get-UwhHeader (T 'profile.load') | ForEach-Object { Write-Host $_ }
     Write-Host ''
 
     if ($names.Count -eq 0) {
-        Write-Host '  Noch keine Profile vorhanden.' -ForegroundColor DarkGray
-        Write-Host '  Ein Profil entsteht, wenn du nach der Auswahl "Als Profil speichern" waehlst.'
+        Write-Host ('  ' + (T 'profile.none')) -ForegroundColor DarkGray
+        Write-UwhProfileHowto
         Write-Host ''
-        Write-Host '  Weiter mit einer beliebigen Taste...' -ForegroundColor DarkGray
+        Write-Host ('  ' + (T 'profile.anykey')) -ForegroundColor DarkGray
         [void][Console]::ReadKey($true)
         return $null
     }
@@ -198,7 +198,7 @@ function Show-UwhProfilePicker {
         Write-Host ('   {0}) {1}' -f ($i + 1), $names[$i])
     }
     Write-Host ''
-    $answer = Read-UwhInline 'Nummer (oder ENTER fuer zurueck):'
+    $answer = Read-UwhInline (T 'profile.number' (T 'menu.key.enter'))
     if (-not $answer) { return $null }
 
     $n = 0
@@ -206,4 +206,10 @@ function Show-UwhProfilePicker {
         return $names[$n - 1]
     }
     return $null
+}
+
+# Wie ein Profil entsteht - an zwei Stellen gebraucht, darum hier.
+function Write-UwhProfileHowto {
+    Write-Host ('  ' + (T 'profile.howto1')) -ForegroundColor DarkGray
+    Write-Host ('  ' + (T 'profile.howto2' (T 'main.savebefore') (T 'yesno.letter'))) -ForegroundColor DarkGray
 }

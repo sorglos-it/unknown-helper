@@ -9,6 +9,10 @@
 .EXAMPLE
     .\uwh.ps1 -Profile Arbeitsplatz -Unattended
     Gespeichertes Profil ohne Rueckfragen abspielen.
+
+.EXAMPLE
+    .\uwh.ps1 -Language fr
+    Auf Franzoesisch, egal wie Windows eingestellt ist (de, en, fr, it, es).
 #>
 [CmdletBinding()]
 param(
@@ -16,6 +20,7 @@ param(
     [switch]$Unattended,
     [string]$Resume,
     [string]$StateDir,
+    [string]$Language,
     [switch]$List,
     [switch]$NoUpdate,
     [switch]$NoScan,
@@ -26,7 +31,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2.0
 
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $PSScriptRoot "classes\$lib.ps1")
 }
 
@@ -36,6 +41,7 @@ Initialize-UwhConsole
 Initialize-UwhTls
 if ($StateDir) { Set-UwhStateDir $StateDir }
 Initialize-UwhEigenes
+Initialize-UwhLanguage $Language
 
 # Sicherheitsnetz: Anwender bekommen eine Meldung, keinen Stapelabzug.
 # Die technischen Einzelheiten stehen im Protokoll.
@@ -47,6 +53,11 @@ trap {
     exit 1
 }
 
+if ($Language -and -not (Test-UwhLanguage $Language)) {
+    Write-UwhErr (T 'main.badlang' $Language ((Get-UwhLanguages) -join ', '))
+    exit 2
+}
+
 # ------------------------------------------------------------------
 # Kleine Betriebsarten
 # ------------------------------------------------------------------
@@ -54,49 +65,52 @@ trap {
 if ($Version) { Write-Host "uwh $global:UwhVersion"; exit 0 }
 
 if ($Doctor) {
+    function Write-Zeile { param([string]$Name, [string]$Wert) Write-Host ('  {0,-17} {1}' -f $Name, $Wert) }
+
     $os = Get-UwhOsInfo
     Write-Host ''
     Set-UwhWidth
-    Get-UwhHeader 'Systempruefung' | ForEach-Object { Write-Host $_ }
+    Get-UwhHeader (T 'doctor.title') | ForEach-Object { Write-Host $_ }
     Write-Host ''
-    Write-Host ("  Windows           {0} (Build {1}, {2})" -f $os.Caption, $os.Build, $os.Arch)
-    Write-Host ("  PowerShell        {0}" -f $PSVersionTable.PSVersion)
-    Write-Host ("  Administrator     {0}" -f $(if (Test-UwhAdmin) { 'ja' } else { 'nein' }))
-    Write-Host ("  winget            {0}" -f $(if (Test-UwhWinget) { Get-UwhWinget } else { 'FEHLT' }))
-    Write-Host ("  Ablage            {0}" -f (Get-UwhStateDir))
-    Write-Host ("  Ordner            {0}" -f (Get-UwhRoot))
+    Write-Zeile 'Windows' ("{0} (Build {1}, {2})" -f $os.Caption, $os.Build, $os.Arch)
+    Write-Zeile 'PowerShell' $PSVersionTable.PSVersion
+    Write-Zeile (T 'doctor.admin') $(if (Test-UwhAdmin) { T 'doctor.yes' } else { T 'doctor.no' })
+    Write-Zeile 'winget' $(if (Test-UwhWinget) { Get-UwhWinget } else { T 'doctor.missing' })
+    Write-Zeile (T 'doctor.language') (T ('doctor.language.' + (Get-UwhLanguageSource)) (T 'lang.name'))
+    Write-Zeile (T 'doctor.state') (Get-UwhStateDir)
+    Write-Zeile (T 'doctor.folder') (Get-UwhRoot)
     if (Test-UwhOnNetworkDrive) {
-        Write-Host ("  Netzlaufwerk      ja -> erhoeht wird {0} benutzt" -f (Resolve-UwhUncPath (Get-UwhRoot))) -ForegroundColor Yellow
+        Write-Host ('  {0,-17} {1}' -f (T 'doctor.netdrive'), (T 'doctor.netdrive.value' (Resolve-UwhUncPath (Get-UwhRoot)))) -ForegroundColor Yellow
     }
-    Write-Host ("  git               {0}" -f $(if (Get-UwhGit) { Get-UwhGit } else { 'fehlt - eigene Repos nur als lokaler Ordner' }))
+    Write-Zeile 'git' $(if (Get-UwhGit) { Get-UwhGit } else { T 'doctor.git.missing' })
     try {
         $cat = Get-UwhCatalog
-        Write-Host ("  Katalog           {0} Eintraege, {1} Kategorien" -f $cat.Entries.Count, $cat.Categories.Count)
+        Write-Zeile (T 'doctor.catalog') (T 'doctor.catalog.value' $cat.Entries.Count $cat.Categories.Count)
 
         $info = Get-UwhRepos
         if (@($info.Repos).Count -gt 0) {
-            Write-Host '  Eigene Repos'
+            Write-Host ('  ' + (T 'doctor.repos'))
             foreach ($r in $info.Repos) {
                 $treffer = @($cat.Repos | Where-Object { $_.Repo.Id -eq $r.Id }) | Select-Object -First 1
-                $stand = if (-not $r.Aktiv) { 'aus' }
-                         elseif (-not (Test-Path -LiteralPath $r.Pfad)) { 'Ordner fehlt' }
-                         elseif ($treffer) { '{0} Eintraege' -f $treffer.Anzahl } else { 'keine config.yaml' }
-                if ($treffer -and $treffer.Ersetzt -gt 0) { $stand += (', {0} ersetzen uwh-Eintraege' -f $treffer.Ersetzt) }
-                $art = if ($r.Url) { 'git' } else { 'lokal' }
+                $stand = if (-not $r.Aktiv) { T 'doctor.repo.off' }
+                         elseif (-not (Test-Path -LiteralPath $r.Pfad)) { T 'doctor.repo.nofolder' }
+                         elseif ($treffer) { T 'doctor.repo.entries' $treffer.Anzahl } else { T 'doctor.repo.noconfig' }
+                if ($treffer -and $treffer.Ersetzt -gt 0) { $stand += (T 'doctor.repo.replaces' $treffer.Ersetzt) }
+                $art = if ($r.Url) { 'git' } else { T 'doctor.repo.local' }
                 Write-Host ("    {0,-22} {1,-6} {2}" -f $r.Name, $art, $stand)
             }
         }
 
         if ($cat.Problems.Count -gt 0) {
-            Write-Host '  Fehlerhafte Eintraege:' -ForegroundColor Yellow
+            Write-Host ('  ' + (T 'doctor.problems')) -ForegroundColor Yellow
             $cat.Problems | ForEach-Object { Write-Host "    - $_" -ForegroundColor DarkGray }
         }
     } catch {
-        Write-Host ("  Katalog           FEHLER: {0}" -f $_.Exception.Message) -ForegroundColor Red
+        Write-Host ('  {0,-17} {1}' -f (T 'doctor.catalog'), (T 'doctor.catalog.error' $_.Exception.Message)) -ForegroundColor Red
     }
     Write-Host ''
     if (-not (Test-UwhWinget)) {
-        Write-Host '  winget fehlt. Im Microsoft Store "App Installer" installieren.' -ForegroundColor Yellow
+        Write-Host ('  ' + (T 'doctor.nowinget')) -ForegroundColor Yellow
         Write-Host ''
         exit 1
     }
@@ -109,7 +123,7 @@ if ($List) {
         $items = @($cat.Entries | Where-Object { $_.Category -eq $c } | Sort-Object Name)
         if ($items.Count -eq 0) { continue }
         Write-Host ''
-        Write-Host "  $c" -ForegroundColor Cyan
+        Write-Host ('  ' + (Get-UwhCategoryName $cat $c)) -ForegroundColor Cyan
         foreach ($e in $items) {
             Write-Host ("    {0}  {1}" -f $e.Key.PadRight(22), $e.Description) -ForegroundColor Gray
         }
@@ -149,19 +163,21 @@ function Invoke-UwhRun {
     if ($Plan.NeedsAdmin -and -not (Test-UwhAdmin)) {
         Save-UwhState $Plan
         Write-Host ''
-        Write-UwhInfo 'Fuer die Installation werden Administratorrechte gebraucht.'
+        Write-UwhInfo (T 'run.admin')
         try {
-            $code = Invoke-UwhElevated @('-Resume', $Plan.Id, '-StateDir', (Get-UwhStateDir), '-NoUpdate')
+            # Die Sprache reist mit: ein Administrator-Konto kann eine andere haben.
+            $code = Invoke-UwhElevated @('-Resume', $Plan.Id, '-StateDir', (Get-UwhStateDir), '-NoUpdate',
+                                         '-Language', (Get-UwhLanguage))
             return $code
         } catch {
-            Write-UwhErr 'Ohne Administratorrechte geht es nicht weiter.'
+            Write-UwhErr (T 'run.noadmin')
             return 2
         }
     }
 
     Set-UwhWidth
     Clear-Host
-    Get-UwhHeader 'Installation laeuft' | ForEach-Object { Write-Host $_ }
+    Get-UwhHeader (T 'run.title') | ForEach-Object { Write-Host $_ }
 
     [void](Invoke-UwhPlan $Catalog $Plan)
     $code = Show-UwhReport $Catalog $Plan
@@ -172,7 +188,7 @@ function Invoke-UwhRun {
     }
 
     if (-not $Plan.Unattended) {
-        Write-Host '  Taste druecken zum Beenden...' -ForegroundColor DarkGray
+        Write-Host ('  ' + (T 'run.presskey')) -ForegroundColor DarkGray
         [void][Console]::ReadKey($true)
     }
     return $code
@@ -183,11 +199,11 @@ function Invoke-UwhRun {
 # ------------------------------------------------------------------
 
 if ($Resume) {
-    if (-not (Test-UwhSafeId $Resume)) { Write-UwhErr 'Ungueltige Lauf-Kennung.'; exit 2 }
+    if (-not (Test-UwhSafeId $Resume)) { Write-UwhErr (T 'main.badresume'); exit 2 }
 
     Unregister-UwhResume $Resume
     $plan = Import-UwhState $Resume
-    if (-not $plan) { Write-UwhErr "Kein Lauf mit der Kennung '$Resume' gefunden."; exit 2 }
+    if (-not $plan) { Write-UwhErr (T 'main.noresume' $Resume); exit 2 }
 
     $catalog = Get-UwhCatalog
     exit (Invoke-UwhRun $catalog $plan)
@@ -199,7 +215,7 @@ if ($Resume) {
 
 $catalog = Get-UwhCatalog
 if ($catalog.Problems.Count -gt 0) {
-    foreach ($p in $catalog.Problems) { Write-UwhWarn "Katalog: $p" }
+    foreach ($p in $catalog.Problems) { Write-UwhWarn (T 'main.catalog' $p) }
 }
 
 if ($ProfileName) {
@@ -211,11 +227,11 @@ if ($ProfileName) {
         $vorhanden = @(Get-UwhProfileNames)
         Write-Host ''
         if ($vorhanden.Count -gt 0) {
-            Write-Host '  Vorhandene Profile:' -ForegroundColor DarkGray
+            Write-Host ('  ' + (T 'profile.list')) -ForegroundColor DarkGray
             foreach ($n in $vorhanden) { Write-Host "    $n" -ForegroundColor DarkGray }
         } else {
-            Write-Host '  Es gibt noch kein Profil. Eines entsteht im Menue:' -ForegroundColor DarkGray
-            Write-Host '  auswaehlen, dann "Auswahl vorher als Profil speichern?" mit j bestaetigen.' -ForegroundColor DarkGray
+            Write-Host ('  ' + (T 'profile.none')) -ForegroundColor DarkGray
+            Write-UwhProfileHowto
         }
         Write-Host ''
         exit 2
@@ -227,13 +243,13 @@ if ($ProfileName) {
                         -ContinueOnError ([bool]$prof.Options['continue_on_error']) `
                         -RebootPolicy ([string]$prof.Options['reboot'])
 
-    if ($plan.Items.Count -eq 0) { Write-UwhErr 'Das Profil enthaelt nichts Ausfuehrbares.'; exit 2 }
+    if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.emptyprofile'); exit 2 }
 
     Set-UwhLogFile $plan.LogFile
     Invoke-UwhCollect $catalog $plan
 
     if (-not $unattended) {
-        if (-not (Show-UwhSummary $catalog $plan)) { Write-Host '  Abgebrochen.'; exit 0 }
+        if (-not (Show-UwhSummary $catalog $plan)) { Write-Host ('  ' + (T 'main.cancelled')); exit 0 }
     }
     exit (Invoke-UwhRun $catalog $plan)
 }
@@ -245,7 +261,7 @@ if ($ProfileName) {
 $installed = @{}
 if (-not $NoScan) {
     Write-Host ''
-    Write-Host '  Einen Moment - vorhandene Programme werden gesucht...' -ForegroundColor DarkGray
+    Write-Host ('  ' + (T 'main.scanning')) -ForegroundColor DarkGray
     foreach ($e in $catalog.Entries) {
         if ($e.Provider -in @('winget', 'msstore')) {
             if (Test-UwhEntryInstalled $e) { $installed[$e.Key] = $true }
@@ -299,28 +315,28 @@ foreach ($key in $selection.Keys) {
 }
 
 $plan = New-UwhPlan $catalog $ordered.ToArray()
-if ($plan.Items.Count -eq 0) { Write-UwhErr 'Nichts ausgewaehlt.'; exit 2 }
+if ($plan.Items.Count -eq 0) { Write-UwhErr (T 'main.nothing'); exit 2 }
 
 Set-UwhLogFile $plan.LogFile
 Invoke-UwhCollect $catalog $plan
 
 if (-not (Show-UwhSummary $catalog $plan)) {
     Write-Host ''
-    if (Read-UwhConfirm 'Auswahl als Profil speichern?' $false) {
-        $name = Read-UwhInline 'Name fuer das Profil:'
+    if (Read-UwhConfirm (T 'main.saveafter') $false) {
+        $name = Read-UwhInline (T 'main.profilename')
         if ($name) {
-            try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items $catalog)) }
+            try { Write-UwhOk (T 'main.saved' (Save-UwhProfile $name $plan.Items $catalog)) }
             catch { Write-UwhErr $_.Exception.Message }
         }
     }
-    Write-Host '  Abgebrochen.'
+    Write-Host ('  ' + (T 'main.cancelled'))
     exit 0
 }
 
-if (Read-UwhConfirm 'Auswahl vorher als Profil speichern?' $false) {
-    $name = Read-UwhInline 'Name fuer das Profil:'
+if (Read-UwhConfirm (T 'main.savebefore') $false) {
+    $name = Read-UwhInline (T 'main.profilename')
     if ($name) {
-        try { Write-UwhOk ("Gespeichert: {0}" -f (Save-UwhProfile $name $plan.Items $catalog)) }
+        try { Write-UwhOk (T 'main.saved' (Save-UwhProfile $name $plan.Items $catalog)) }
         catch { Write-UwhErr $_.Exception.Message }
     }
 }

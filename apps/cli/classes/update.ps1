@@ -47,7 +47,8 @@ function Test-UwhNewer {
 }
 
 # Kopiert den Inhalt von Quelle nach Ziel und laesst das Eigene des Anwenders in
-# Ruhe: apps\cli\data (Profile, eigene Repos, Schluessel) und config\repo.yaml.
+# Ruhe: apps\cli\data (Profile, eigene Repos, Schluessel), config\repo.yaml und\r
+# config\settings.yaml (die gewaehlte Sprache).
 # Beides ist nie im Archiv - der Schutz greift, falls es doch hineingeraet.
 # Skip nimmt Pfade relativ zur Quelle.
 #
@@ -58,7 +59,7 @@ function Copy-UwhTree {
     param(
         [Parameter(Mandatory)][string]$Source,
         [Parameter(Mandatory)][string]$Target,
-        [string[]]$Skip = @('apps\cli\data', 'apps\cli\config\repo.yaml'),
+        [string[]]$Skip = @('apps\cli\data', 'apps\cli\config\repo.yaml', 'apps\cli\config\settings.yaml'),
         [string]$Relativ = ''
     )
 
@@ -94,7 +95,7 @@ function Update-Uwh {
     if (-not $remote) { return $false }
     if (-not (Test-UwhNewer $remote $local)) { return $false }
 
-    if (-not $Quiet) { Write-UwhInfo "Neue Version $remote wird geladen (aktuell $local)..." }
+    if (-not $Quiet) { Write-UwhInfo (T 'update.loading' $remote $local) }
 
     $tmp = Join-Path $env:TEMP ('uwh-update-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
     $zip = "$tmp.zip"
@@ -111,11 +112,11 @@ function Update-Uwh {
 
         Copy-UwhTree $source.FullName $stamm
 
-        if (-not $Quiet) { Write-UwhOk "Auf Version $remote aktualisiert." }
+        if (-not $Quiet) { Write-UwhOk (T 'update.done' $remote) }
         return $true
     } catch {
         Write-UwhLog 'WARN' "Aktualisierung fehlgeschlagen: $($_.Exception.Message)"
-        if (-not $Quiet) { Write-UwhWarn 'Aktualisierung fehlgeschlagen - es geht mit der vorhandenen Version weiter.' }
+        if (-not $Quiet) { Write-UwhWarn (T 'update.failed') }
         return $false
     } finally {
         Remove-Item -LiteralPath $zip -Force -ErrorAction SilentlyContinue

@@ -22,7 +22,7 @@ function Invoke-UwhProvider {
         'psmodule'   { return Invoke-UwhPsModule   $Entry $Action }
         'script'     { return Invoke-UwhScript     $Entry $Action $Answers }
     }
-    return New-UwhResult 'fehler' "Unbekannter provider '$($Entry.Provider)'."
+    return New-UwhResult 'fehler' (T 'catalog.badprovider' $Entry.Provider)
 }
 
 # ------------------------------------------------------------------
@@ -82,11 +82,20 @@ function Invoke-UwhWinget {
 
     $exe = Get-UwhWinget
     if (-not $exe) {
-        return New-UwhResult 'fehler' 'winget fehlt. Bitte "App Installer" aus dem Microsoft Store installieren.'
+        return New-UwhResult 'fehler' (T 'result.nowinget')
+    }
+
+    # Installiert wird die Fassung der eingestellten Sprache. Aktualisiert und
+    # entfernt wird die, die wirklich da ist - auch wenn sie in einer anderen
+    # Sprache installiert wurde.
+    $id = $Entry.Id
+    if ($Action -ne 'install') {
+        $da = Get-UwhInstalledVariant $Entry
+        if ($da) { $id = $da }
     }
 
     $common = @(
-        '--id', $Entry.Id, '--exact',
+        '--id', $id, '--exact',
         '--source', $Source,
         '--accept-source-agreements',
         '--disable-interactivity',
@@ -102,14 +111,14 @@ function Invoke-UwhWinget {
             # Manche Pakete gibt es nur fuer den angemeldeten Benutzer.
             # Deshalb bei jedem Fehlschlag einmal ohne Bereichsangabe nachfassen.
             if ($r.Code -ne 0 -and $Entry.Scope -eq 'machine') {
-                Write-UwhLog 'INFO' "$($Entry.Id): zweiter Versuch ohne --scope machine."
+                Write-UwhLog 'INFO' "${id}: zweiter Versuch ohne --scope machine."
                 $zweiter = Invoke-UwhExe $exe (@('install') + $common + @('--accept-package-agreements'))
                 if ($zweiter.Code -eq 0 -or $zweiter.Code -in $script:UwhRebootCodes) { $r = $zweiter }
             }
 
             if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
-            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
-            if (Test-UwhWingetPresent $Entry.Id $Source) { return New-UwhResult 'nichts' 'Bereits installiert' }
+            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
+            if (Test-UwhWingetPresent $id $Source) { return New-UwhResult 'nichts' (T 'result.installed') }
             return New-UwhResult 'fehler' (Get-UwhWingetFehler $r)
         }
 
@@ -117,9 +126,9 @@ function Invoke-UwhWinget {
             $r = Invoke-UwhExe $exe (@('upgrade') + $common + @('--accept-package-agreements'))
 
             if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
-            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
             # Steht es noch da, war schlicht nichts zu tun.
-            if (Test-UwhWingetPresent $Entry.Id $Source) { return New-UwhResult 'nichts' 'Bereits aktuell' }
+            if (Test-UwhWingetPresent $id $Source) { return New-UwhResult 'nichts' (T 'result.current') }
             return New-UwhResult 'fehler' (Get-UwhWingetFehler $r)
         }
 
@@ -127,13 +136,13 @@ function Invoke-UwhWinget {
             $r = Invoke-UwhExe $exe (@('uninstall') + $common)
 
             if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
-            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
-            if (-not (Test-UwhWingetPresent $Entry.Id $Source)) { return New-UwhResult 'nichts' 'Nicht installiert' }
+            if ($r.Code -in $script:UwhRebootCodes) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
+            if (-not (Test-UwhWingetPresent $id $Source)) { return New-UwhResult 'nichts' (T 'result.notinstalled') }
             return New-UwhResult 'fehler' (Get-UwhWingetFehler $r)
         }
     }
 
-    return New-UwhResult 'fehler' "Aktion '$Action' kennt winget nicht."
+    return New-UwhResult 'fehler' (T 'result.badaction' $Action)
 }
 
 # Klartext von winget mitnehmen - eine nackte Zahl hilft niemandem weiter.
@@ -144,7 +153,7 @@ function Get-UwhWingetFehler {
     $letzte = if ($zeilen.Count -gt 0) { $zeilen[-1] } else { '' }
     if ($letzte.Length -gt 90) { $letzte = $letzte.Substring(0, 89) + '.' }
     if ($letzte) { return ("{0} (Code {1})" -f $letzte, $Run.Code) }
-    return ("winget meldet Code {0}" -f $Run.Code)
+    return (T 'result.wingetcode' $Run.Code)
 }
 
 # Einmalig alle installierten Pakete ermitteln, damit das Menue den Stand zeigt.
@@ -176,12 +185,33 @@ function Get-UwhInstalledIds {
     return $script:UwhInstalledIds
 }
 
+# Alle Paketkennungen eines Eintrags - bei Firefox eine je Sprache.
+function Get-UwhEntryIds {
+    param($Entry)
+    if ($Entry.PSObject.Properties['Ids'] -and @($Entry.Ids).Count -gt 0) { return @($Entry.Ids) }
+    return @($Entry.Id)
+}
+
+# Welche Fassung eines Eintrags installiert ist. Gibt es nur eine Kennung,
+# wird winget gar nicht erst gefragt.
+function Get-UwhInstalledVariant {
+    param($Entry)
+    $ids = @(Get-UwhEntryIds $Entry)
+    if ($ids.Count -lt 2) { return $null }
+    $da = Get-UwhInstalledIds
+    foreach ($i in @($Entry.Id) + $ids) { if ($da.ContainsKey($i)) { return $i } }
+    return $null
+}
+
 function Test-UwhEntryInstalled {
     param($Entry)
 
     switch ($Entry.Provider) {
         { $_ -in @('winget', 'msstore') } {
-            return (Get-UwhInstalledIds).ContainsKey($Entry.Id)
+            # In welcher Sprache es installiert wurde, ist egal - da ist da.
+            $da = Get-UwhInstalledIds
+            foreach ($i in (Get-UwhEntryIds $Entry)) { if ($da.ContainsKey($i)) { return $true } }
+            return $false
         }
         'feature' {
             try {
@@ -212,17 +242,17 @@ function Invoke-UwhFeature {
     try {
         if ($Action -eq 'install') {
             $state = Get-WindowsOptionalFeature -Online -FeatureName $Entry.Id -ErrorAction Stop
-            if ($state.State -eq 'Enabled') { return New-UwhResult 'nichts' 'Bereits aktiv' }
+            if ($state.State -eq 'Enabled') { return New-UwhResult 'nichts' (T 'result.active') }
             $r = Enable-WindowsOptionalFeature -Online -FeatureName $Entry.Id -All -NoRestart -ErrorAction Stop
         } elseif ($Action -eq 'uninstall') {
             $state = Get-WindowsOptionalFeature -Online -FeatureName $Entry.Id -ErrorAction Stop
-            if ($state.State -ne 'Enabled') { return New-UwhResult 'nichts' 'Nicht aktiv' }
+            if ($state.State -ne 'Enabled') { return New-UwhResult 'nichts' (T 'result.inactive') }
             $r = Disable-WindowsOptionalFeature -Online -FeatureName $Entry.Id -NoRestart -ErrorAction Stop
         } else {
-            return New-UwhResult 'fehler' "Aktion '$Action' gibt es fuer Windows-Funktionen nicht."
+            return New-UwhResult 'fehler' (T 'result.badaction' $Action)
         }
 
-        if ($r.RestartNeeded) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+        if ($r.RestartNeeded) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
         return New-UwhResult 'ok' ''
     } catch {
         return New-UwhResult 'fehler' $_.Exception.Message
@@ -235,16 +265,16 @@ function Invoke-UwhCapability {
     try {
         $state = Get-WindowsCapability -Online -Name $Entry.Id -ErrorAction Stop
         if ($Action -eq 'install') {
-            if ($state.State -eq 'Installed') { return New-UwhResult 'nichts' 'Bereits vorhanden' }
+            if ($state.State -eq 'Installed') { return New-UwhResult 'nichts' (T 'result.present') }
             $r = Add-WindowsCapability -Online -Name $Entry.Id -ErrorAction Stop
         } elseif ($Action -eq 'uninstall') {
-            if ($state.State -ne 'Installed') { return New-UwhResult 'nichts' 'Nicht vorhanden' }
+            if ($state.State -ne 'Installed') { return New-UwhResult 'nichts' (T 'result.absent') }
             $r = Remove-WindowsCapability -Online -Name $Entry.Id -ErrorAction Stop
         } else {
-            return New-UwhResult 'fehler' "Aktion '$Action' gibt es hier nicht."
+            return New-UwhResult 'fehler' (T 'result.badaction' $Action)
         }
 
-        if ($r -and $r.RestartNeeded) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+        if ($r -and $r.RestartNeeded) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
         return New-UwhResult 'ok' ''
     } catch {
         return New-UwhResult 'fehler' $_.Exception.Message
@@ -258,8 +288,8 @@ function Invoke-UwhCapability {
 function Invoke-UwhUrl {
     param($Entry, [string]$Action)
 
-    if ($Action -ne 'install') { return New-UwhResult 'fehler' "Aktion '$Action' gibt es hier nicht." }
-    if (-not (Test-UwhHttpsUrl $Entry.Url)) { return New-UwhResult 'fehler' 'Kein gueltiger https-Link.' }
+    if ($Action -ne 'install') { return New-UwhResult 'fehler' (T 'result.badaction' $Action) }
+    if (-not (Test-UwhHttpsUrl $Entry.Url)) { return New-UwhResult 'fehler' (T 'result.badurl') }
 
     Initialize-UwhTls
     $ext = [IO.Path]::GetExtension(([uri]$Entry.Url).AbsolutePath)
@@ -272,7 +302,7 @@ function Invoke-UwhUrl {
         if ($Entry.Sha256) {
             $hash = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash
             if ($hash -ne $Entry.Sha256.ToUpperInvariant()) {
-                return New-UwhResult 'fehler' 'Pruefsumme stimmt nicht. Download verworfen.'
+                return New-UwhResult 'fehler' (T 'result.checksum')
             }
         } else {
             Write-UwhLog 'WARN' "$($Entry.Key): ohne sha256 geladen."
@@ -288,8 +318,8 @@ function Invoke-UwhUrl {
         }
 
         if ($r.Code -eq 0) { return New-UwhResult 'ok' '' }
-        if ($r.Code -eq 3010 -or $r.Code -eq 1641) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
-        return New-UwhResult 'fehler' ("Installationsprogramm meldet Code {0}" -f $r.Code)
+        if ($r.Code -eq 3010 -or $r.Code -eq 1641) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
+        return New-UwhResult 'fehler' (T 'result.setupcode' $r.Code)
     } catch {
         return New-UwhResult 'fehler' $_.Exception.Message
     } finally {
@@ -310,19 +340,19 @@ function Invoke-UwhPsModule {
             Install-PackageProvider -Name NuGet -Force -Scope AllUsers -ErrorAction Stop | Out-Null
         }
     } catch {
-        return New-UwhResult 'fehler' "NuGet-Anbieter fehlt: $($_.Exception.Message)"
+        return New-UwhResult 'fehler' (T 'result.nuget' $_.Exception.Message)
     }
 
     $scope = if ($Entry.Scope -eq 'user') { 'CurrentUser' } else { 'AllUsers' }
     try {
         switch ($Action) {
             'install' {
-                if (Get-Module -ListAvailable -Name $Entry.Id) { return New-UwhResult 'nichts' 'Bereits vorhanden' }
+                if (Get-Module -ListAvailable -Name $Entry.Id) { return New-UwhResult 'nichts' (T 'result.present') }
                 Install-Module -Name $Entry.Id -Scope $scope -Force -AcceptLicense -AllowClobber -ErrorAction Stop
             }
             'update'    { Update-Module -Name $Entry.Id -Force -ErrorAction Stop }
             'uninstall' { Uninstall-Module -Name $Entry.Id -AllVersions -Force -ErrorAction Stop }
-            default     { return New-UwhResult 'fehler' "Aktion '$Action' gibt es hier nicht." }
+            default     { return New-UwhResult 'fehler' (T 'result.badaction' $Action) }
         }
         return New-UwhResult 'ok' ''
     } catch {
@@ -344,17 +374,21 @@ function Invoke-UwhScript {
         $path = Join-Path (Join-Path $Entry.BaseDir 'scripts') $Entry.File
     }
     if (-not (Test-Path -LiteralPath $path)) {
-        return New-UwhResult 'fehler' "Skript nicht gefunden: $($Entry.File)"
+        return New-UwhResult 'fehler' (T 'result.noscript' $Entry.File)
     }
 
     # Eigene Skripte laufen in einem eigenen Prozess. Sonst koennte ein fremdes
     # Skript uwh-Funktionen ueberschreiben oder die Sitzung durcheinanderbringen.
-    # Antworten werden ueber die Umgebung vererbt.
+    # Antworten werden ueber die Umgebung vererbt, die Sprache in UWH_LANG.
+    $umgebung = @{}
+    foreach ($k in $Answers.Keys) { $umgebung[$k] = [string]$Answers[$k] }
+    $umgebung['UWH_LANG'] = Get-UwhLanguage
+
     $saved = @{}
     try {
-        foreach ($k in $Answers.Keys) {
+        foreach ($k in $umgebung.Keys) {
             $saved[$k] = [Environment]::GetEnvironmentVariable($k, 'Process')
-            [Environment]::SetEnvironmentVariable($k, [string]$Answers[$k], 'Process')
+            [Environment]::SetEnvironmentVariable($k, $umgebung[$k], 'Process')
         }
 
         $r = Invoke-UwhExe (Get-UwhPowerShellExe) @(
@@ -366,7 +400,7 @@ function Invoke-UwhScript {
         if ($r.Code -eq 0 -or $r.Code -eq 3010) {
             # Gelungen: zeigen, was das Skript gesagt hat.
             Show-UwhSkriptAusgabe $r.Output
-            if ($r.Code -eq 3010) { return New-UwhResult 'ok' 'Neustart noetig' -Reboot }
+            if ($r.Code -eq 3010) { return New-UwhResult 'ok' (T 'result.reboot') -Reboot }
             return New-UwhResult 'ok' ''
         }
 
@@ -400,14 +434,14 @@ function Get-UwhSkriptFehler {
         $_ -notmatch '^(At |In |\+|~)' -and
         $_ -notmatch '^(CategoryInfo|FullyQualifiedErrorId)'
     })
-    if ($zeilen.Count -eq 0) { return ("Skript meldet Code {0}" -f $Run.Code) }
+    if ($zeilen.Count -eq 0) { return (T 'result.scriptcode' $Run.Code) }
 
     # 'powershell.exe : C:\pfad\zum\skript.ps1 : Die eigentliche Meldung'
     $text = $zeilen[0]
     $text = $text -replace '^powershell\.exe\s*:\s*', ''
     $text = $text -replace '^.*\.ps1\s*:\s*', ''
     $text = $text.Trim()
-    if (-not $text) { return ("Skript meldet Code {0}" -f $Run.Code) }
+    if (-not $text) { return (T 'result.scriptcode' $Run.Code) }
     if ($text.Length -gt 90) { $text = $text.Substring(0, 89) + '.' }
 
     return ("{0} (Code {1})" -f $text, $Run.Code)

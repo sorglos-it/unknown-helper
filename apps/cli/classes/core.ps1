@@ -49,30 +49,43 @@ function Write-UwhLog {
     try { Add-Content -Path $script:UwhLogFile -Value $line -Encoding UTF8 } catch { }
 }
 
+# Die Plakette vor einer Meldung. Alle einer Sprache sind gleich breit - so
+# breit wie die laengste, denn nicht jede Sprache kommt mit vier Buchstaben aus.
+function Format-UwhBadge {
+    param([string]$Key)
+    $breite = 4
+    foreach ($k in @('badge.ok', 'badge.info', 'badge.warn', 'badge.err')) {
+        $breite = [Math]::Max($breite, (T $k).Length)
+    }
+    $text = T $Key
+    $links = [int][Math]::Floor(($breite - $text.Length) / 2)
+    return ' ' + (' ' * $links) + $text + (' ' * ($breite - $text.Length - $links)) + ' '
+}
+
 function Write-UwhOk {
     param([string]$Message)
-    Write-Host '  OK  ' -NoNewline -ForegroundColor Black -BackgroundColor DarkGreen
+    Write-Host (Format-UwhBadge 'badge.ok') -NoNewline -ForegroundColor Black -BackgroundColor DarkGreen
     Write-Host " $Message"
     Write-UwhLog 'OK' $Message
 }
 
 function Write-UwhInfo {
     param([string]$Message)
-    Write-Host ' INFO ' -NoNewline -ForegroundColor Black -BackgroundColor DarkCyan
+    Write-Host (Format-UwhBadge 'badge.info') -NoNewline -ForegroundColor Black -BackgroundColor DarkCyan
     Write-Host " $Message"
     Write-UwhLog 'INFO' $Message
 }
 
 function Write-UwhWarn {
     param([string]$Message)
-    Write-Host ' ACHT ' -NoNewline -ForegroundColor Black -BackgroundColor DarkYellow
+    Write-Host (Format-UwhBadge 'badge.warn') -NoNewline -ForegroundColor Black -BackgroundColor DarkYellow
     Write-Host " $Message" -ForegroundColor Yellow
     Write-UwhLog 'WARN' $Message
 }
 
 function Write-UwhErr {
     param([string]$Message)
-    Write-Host ' FEHL ' -NoNewline -ForegroundColor White -BackgroundColor DarkRed
+    Write-Host (Format-UwhBadge 'badge.err') -NoNewline -ForegroundColor White -BackgroundColor DarkRed
     Write-Host " $Message" -ForegroundColor Red
     Write-UwhLog 'ERROR' $Message
 }

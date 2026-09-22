@@ -10,7 +10,9 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
+# Die Sprachdateien werden gelesen, bevor uwh in den Sandkasten umzieht.
+Set-UwhLanguage 'de'
 
 # uwh wird fuer die ganze Pruefung in einen eigenen Ordner umgeleitet.
 $sb = Join-Path $env:TEMP ('uwh-eigene-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -52,23 +54,29 @@ function Schreibe {
 # Ein kleiner uwh mit eigenem Repo
 # ------------------------------------------------------------------
 
+# Wie der echte Katalog: Grundtext Englisch, Uebersetzung mit Kuerzel.
 Schreibe 'assets\catalog.yaml' @(
     'categories:'
-    '  - Grundausstattung'
-    '  - Browser'
+    '  - Essentials'
+    '  - Browsers'
     'scripts:'
     '  7zip:'
     '    name: 7-Zip'
-    '    description: Archive'
-    '    category: Grundausstattung'
+    '    description: Archives'
+    '    category: Essentials'
+    '    descriptionDE: Archive'
+    '    categoryDE: Grundausstattung'
     '    provider: winget'
     '    id: 7zip.7zip'
     '  firefox:'
     '    name: Mozilla Firefox'
-    '    description: Webbrowser'
-    '    category: Browser'
+    '    description: Web browser'
+    '    category: Browsers'
+    '    descriptionDE: Webbrowser'
+    '    categoryDE: Browser'
     '    provider: winget'
-    '    id: Mozilla.Firefox.de'
+    '    id: Mozilla.Firefox'
+    '    idDE: Mozilla.Firefox.de'
 )
 
 Schreibe 'data\eigene\config.yaml' @(
@@ -78,6 +86,12 @@ Schreibe 'data\eigene\config.yaml' @(
     '    description: Ohne Kategorie'
     '    provider: winget'
     '    id: Loxone.LoxoneConfig'
+    '  alt:'
+    '    name: Alter Eintrag'
+    '    description: Deutsche Kategorie von frueher'
+    '    category: Grundausstattung'
+    '    provider: winget'
+    '    id: Alt.Alt'
     '  vivaldi:'
     '    name: Vivaldi'
     '    description: In einer vorhandenen Kategorie'
@@ -108,6 +122,7 @@ Schreibe 'config\repo.yaml' @(
     'repositories:'
     '  eigene:'
     '    name: Eigene Programme'
+    '    nameEN: Own programs'
     '    url: ""'
     '    path: eigene'
     '    enabled:'
@@ -193,9 +208,38 @@ Test-Case 'Ohne Kategorie landet ein Eintrag unter dem Namen des Repos' {
     Assert-True ($katalog.Categories -contains 'Eigene Programme') 'Kategorie angelegt'
 }
 
-Test-Case 'Mit vorhandener Kategorie reiht er sich dort ein' {
-    Assert-Equal 'Browser' (Get-UwhEntry $katalog 'vivaldi').Category 'Kategorie'
-    Assert-Equal 1 @($katalog.Categories | Where-Object { $_ -eq 'Browser' }).Count 'Browser nur einmal'
+Test-Case 'Mit vorhandener Kategorie reiht er sich dort ein - auch mit deutschem Namen' {
+    # 'Browser' ist der deutsche Name der Kategorie 'Browsers' von uwh.
+    Assert-Equal 'Browsers' (Get-UwhEntry $katalog 'vivaldi').Category 'Kategorie'
+    Assert-Equal 'Essentials' (Get-UwhEntry $katalog 'alt').Category 'alte deutsche Kategorie'
+    Assert-Equal 1 @($katalog.Categories | Where-Object { $_ -eq 'Browsers' }).Count 'Browsers nur einmal'
+    Assert-Equal 0 @($katalog.Categories | Where-Object { $_ -eq 'Browser' -or $_ -eq 'Grundausstattung' }).Count 'keine doppelte Kategorie'
+}
+
+Test-Case 'Ersetzt ein eigener Eintrag den einzigen der Kategorie, bleiben ihre Namen' {
+    # Die eigene Fassung von firefox nennt die Kategorie nur 'Browser'.
+    Assert-Equal 'Browsers' (Get-UwhEntry $katalog 'firefox').Category 'Kennung'
+    Assert-Equal 'Browser' (Get-UwhCategoryName $katalog 'Browsers') 'deutscher Name'
+    Set-UwhLanguage 'en'
+    try {
+        Set-UwhCatalogLanguage $katalog
+        Assert-Equal 'Browsers' (Get-UwhCategoryName $katalog 'Browsers') 'englischer Name'
+    } finally {
+        Set-UwhLanguage 'de'
+        Set-UwhCatalogLanguage $katalog
+    }
+}
+
+Test-Case 'Der Name eines Repos darf uebersetzt sein' {
+    Set-UwhLanguage 'en'
+    try {
+        Set-UwhCatalogLanguage $katalog
+        Assert-Equal 'Own programs' (Get-UwhCategoryName $katalog 'Eigene Programme') 'Kategorie auf Englisch'
+    } finally {
+        Set-UwhLanguage 'de'
+        Set-UwhCatalogLanguage $katalog
+    }
+    Assert-Equal 'Eigene Programme' (Get-UwhCategoryName $katalog 'Eigene Programme') 'und auf Deutsch'
 }
 
 Test-Case 'Gleicher Name: die eigene Fassung ersetzt die von uwh' {
@@ -231,7 +275,7 @@ Test-Case 'Ein leeres eigenes Repo ist kein Fehler' {
 }
 
 Test-Case 'Erster Start legt Vorlagen an, ueberschreibt aber nichts' {
-    foreach ($n in @('config\repo.yaml.example', 'templates\eigene.yaml', 'templates\beispiel-profil.yaml')) {
+    foreach ($n in @('config\repo.yaml.example', 'config\settings.yaml.example', 'templates\eigene.yaml', 'templates\beispiel-profil.yaml')) {
         $z = Join-Path $sb $n
         New-Item -ItemType Directory -Path (Split-Path -Parent $z) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $root $n) -Destination $z
@@ -243,6 +287,7 @@ Test-Case 'Erster Start legt Vorlagen an, ueberschreibt aber nichts' {
     Assert-Equal $vorher (Get-Content -LiteralPath (Join-Path $sb 'config\repo.yaml') -Raw) 'repo.yaml unberuehrt'
     Assert-True ((Get-Content (Join-Path $sb 'data\eigene\config.yaml') -Raw) -like '*Loxone*') 'eigene Programme unberuehrt'
     Assert-True (Test-Path (Join-Path $sb 'data\profiles\beispiel.yaml')) 'Beispielprofil angelegt'
+    Assert-True (Test-Path (Join-Path $sb 'config\settings.yaml')) 'Einstellungen angelegt'
 
     # Wer das Beispielprofil loescht, will es nicht zurueck.
     Remove-Item -LiteralPath (Join-Path $sb 'data\profiles\beispiel.yaml')

@@ -17,15 +17,13 @@ function Set-UwhWidth {
 }
 
 # Die drei Betriebsarten des Menues, in dieser Reihenfolge durchgeschaltet.
-$script:UwhModi = @(
-    [pscustomobject]@{ Name = 'install';   Titel = 'Installieren'; Frage = 'Was soll installiert werden?' }
-    [pscustomobject]@{ Name = 'update';    Titel = 'Aktualisieren'; Frage = 'Was soll aktualisiert werden?' }
-    [pscustomobject]@{ Name = 'uninstall'; Titel = 'Entfernen';     Frage = 'Was soll entfernt werden?' }
-)
+# Titel und Frage kommen aus der Sprachdatei.
+$script:UwhModi = @('install', 'update', 'uninstall')
 
 function Get-UwhModus {
     param([int]$Nummer)
-    $script:UwhModi[$Nummer % $script:UwhModi.Count]
+    $name = $script:UwhModi[$Nummer % $script:UwhModi.Count]
+    [pscustomobject]@{ Name = $name; Titel = (T "mode.$name.title"); Frage = (T "mode.$name.ask") }
 }
 
 # ------------------------------------------------------------------
@@ -85,6 +83,74 @@ function Get-UwhHeader {
     return $out
 }
 
+# Verteilt Bausteine auf Zeilen: passt alles in eine, mit drei Leerzeichen
+# dazwischen, sonst mit zwei - und notfalls auf mehrere Zeilen.
+function Join-UwhParts {
+    param([string[]]$Parts, [int]$Width)
+
+    foreach ($abstand in @('   ', '  ')) {
+        $ganz = $Parts -join $abstand
+        if ($ganz.Length -le $Width) { return ,@($ganz.TrimEnd()) }
+    }
+
+    $zeilen = New-Object System.Collections.Generic.List[string]
+    $z = ''
+    foreach ($p in $Parts) {
+        if ($z -and ($z.Length + 2 + $p.Length) -gt $Width) { $zeilen.Add($z.TrimEnd()); $z = '' }
+        $z = if ($z) { $z + '  ' + $p } else { $p }
+    }
+    if ($z) { $zeilen.Add($z.TrimEnd()) }
+    return ,$zeilen.ToArray()
+}
+
+# Die Tastenhilfe unter der Liste - in jeder Sprache und jeder Fensterbreite
+# vollstaendig, ohne etwas abzuschneiden.
+function Get-UwhPickerFoot {
+    param($Modus, [int]$Count)
+
+    # 2 Rand + 2 Einzug + 2 Luft rechts.
+    $breite = $script:UwhWidth - 6
+
+    # Der Modus bekommt die Breite des laengsten Titels - sonst springt die
+    # Aufteilung beim Durchschalten.
+    $laengste = 0
+    foreach ($m in $script:UwhModi) { $laengste = [Math]::Max($laengste, (T "mode.$m.title").Length) }
+
+    $zeilen = New-Object System.Collections.Generic.List[string]
+    $gruppen = @(
+        ,@(
+            ('{0} {1}' -f (T 'menu.key.arrows'), (T 'menu.move'))
+            ('{0} {1}' -f (T 'menu.key.space'), (T 'menu.toggle'))
+            ('{0} {1}' -f (T 'menu.key.enter'), (T 'menu.next'))
+            ('/ {0}' -f (T 'menu.find'))
+            ('ESC {0}' -f (T 'menu.quit'))
+        )
+        ,@(
+            ('A {0}' -f (T 'menu.all'))
+            ('P {0}' -f (T 'menu.profile'))
+            ('M {0}: {1}' -f (T 'menu.mode'), $Modus.Titel.PadRight($laengste))
+            ('L {0}: {1}' -f (T 'menu.language'), (T 'lang.name'))
+        )
+    )
+    foreach ($g in $gruppen) {
+        foreach ($z in (Join-UwhParts $g $breite)) { $zeilen.Add($z) }
+    }
+
+    # Die Anzahl steht rechts in der letzten Zeile, wenn dort Platz ist.
+    $zahl = T 'menu.selected' $Count
+    $letzte = $zeilen[$zeilen.Count - 1]
+    if ($letzte.Length + 3 + $zahl.Length -le $breite) {
+        $zeilen[$zeilen.Count - 1] = $letzte + (' ' * ($breite - $letzte.Length - $zahl.Length)) + $zahl
+    } else {
+        $zeilen.Add((' ' * ($breite - $zahl.Length)) + $zahl)
+    }
+
+    $out = @(New-UwhRule)
+    foreach ($z in $zeilen) { $out += New-UwhLine ('  ' + $z) }
+    $out += New-UwhRule
+    return $out
+}
+
 # ------------------------------------------------------------------
 # Zeilen der Auswahlliste
 # ------------------------------------------------------------------
@@ -100,7 +166,7 @@ function Build-UwhRows {
     foreach ($cat in $Catalog.Categories) {
         $inCat = @($entries | Where-Object { $_.Category -eq $cat } | Sort-Object Name)
         if ($inCat.Count -eq 0) { continue }
-        $rows.Add([pscustomobject]@{ Kind = 'header'; Text = $cat; Entry = $null })
+        $rows.Add([pscustomobject]@{ Kind = 'header'; Text = (Get-UwhCategoryName $Catalog $cat); Entry = $null })
         foreach ($e in $inCat) {
             $rows.Add([pscustomobject]@{
                 Kind      = 'entry'
@@ -143,7 +209,7 @@ function Format-UwhRow {
     if ($desc.Length -gt $breiteDesc) { $desc = $desc.Substring(0, $breiteDesc - 1) + '.' }
 
     $text = '  {0} {1} {2} {3}' -f $mark, $box, $name.PadRight($breiteName), $desc.PadRight($breiteDesc)
-    if ($platzStand -gt 0 -and $Row.Installed) { $text += ' installiert' }
+    if ($platzStand -gt 0 -and $Row.Installed) { $text += ' ' + (T 'menu.installed') }
     return New-UwhLine $text
 }
 
@@ -165,15 +231,20 @@ function Show-UwhPicker {
         $rows = Build-UwhRows $Catalog $filter $Installed $modus.Name
         $pick = @(Get-UwhPickIndexes $rows)
 
+        $sub = if ($filter) { T 'menu.search' $filter } else { $modus.Frage }
+        $head = @(Get-UwhHeader $sub)
+        $foot = @(Get-UwhPickerFoot $modus $Selection.Keys.Count)
+
         if ($pick.Count -eq 0) {
-            $body = @((New-UwhLine ''), (New-UwhLine '  Nichts gefunden. ESC loescht die Suche.'), (New-UwhLine ''))
+            $body = @((New-UwhLine ''), (New-UwhLine ('  ' + (T 'menu.nothing'))), (New-UwhLine ''))
         } else {
             if ($cursor -lt 0) { $cursor = 0 }
             if ($cursor -ge $pick.Count) { $cursor = $pick.Count - 1 }
 
-            # Rahmen kostet 12 Zeilen: 5 Kopf + 2 Leerzeilen + 5 Fuss.
-            # Eine bleibt fuer den Zeilenumbruch am Ende.
-            $height = [Math]::Max(5, [Console]::WindowHeight - 13)
+            # Kopf, zwei Leerzeilen und Fuss gehen ab - wie hoch der Fuss ist,
+            # haengt von Sprache und Fensterbreite ab. Eine Zeile bleibt fuer
+            # den Zeilenumbruch am Ende.
+            $height = [Math]::Max(5, [Console]::WindowHeight - $head.Count - $foot.Count - 3)
             $cursorRow = $pick[$cursor]
             if ($cursorRow -lt $top) { $top = $cursorRow }
             if ($cursorRow -ge $top + $height) { $top = $cursorRow - $height + 1 }
@@ -189,27 +260,7 @@ function Show-UwhPicker {
             $body += New-UwhLine ''
         }
 
-        $sub = if ($filter) { "Suche: $filter" } else { $modus.Frage }
-        $count = $Selection.Keys.Count
-        if ($script:UwhWidth -ge 74) {
-            $foot = @(
-                (New-UwhRule)
-                (New-UwhLine '  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden')
-                (New-UwhLine ('  A alle an/aus    P Profil laden    M Modus: {0}' -f $modus.Titel.PadRight(14)))
-                (New-UwhLine ('{0}{1} ausgewaehlt' -f (' ' * ($script:UwhWidth - 20)), $count))
-                (New-UwhRule)
-            )
-        } else {
-            $foot = @(
-                (New-UwhRule)
-                (New-UwhLine '  Pfeile  LEER An/Aus  ENTER Weiter')
-                (New-UwhLine '  / Suchen  A alle  P Profil  M Modus  ESC Ende')
-                (New-UwhLine ('  {0}: {1} ausgewaehlt' -f $modus.Titel, $count))
-                (New-UwhRule)
-            )
-        }
-
-        Write-UwhFrame (@(Get-UwhHeader $sub) + $body + $foot)
+        Write-UwhFrame ($head + $body + $foot)
 
         $stand = [pscustomobject]@{ Cursor = $cursor; Filter = $filter; Modus = $modus.Name }
         $folge = Invoke-UwhPickerKey ([Console]::ReadKey($true)) $stand $Selection $rows $pick
@@ -221,7 +272,7 @@ function Show-UwhPicker {
             'ende'   { return 'ende' }
             'profil' { return 'profil' }
             'suchen' {
-                $filter = Read-UwhInline 'Suchen nach'
+                $filter = Read-UwhInline (T 'menu.searchfor')
                 $cursor = 0; $top = 0
             }
             'oben'   { $top = 0 }
@@ -231,6 +282,14 @@ function Show-UwhPicker {
                 $Selection.Clear()
                 $modusNr++
                 $cursor = 0; $top = 0
+            }
+            'sprache' {
+                # Die Auswahl bleibt - nur die Texte wechseln. Gemerkt wird die
+                # Sprache fuer den naechsten Start.
+                $neu = Get-UwhNextLanguage
+                Set-UwhLanguage $neu
+                [void](Save-UwhLanguage $neu)
+                Set-UwhCatalogLanguage $Catalog
             }
         }
     }
@@ -294,6 +353,8 @@ function Invoke-UwhPickerKey {
                 return 'profil'
             } elseif ($c -eq 'm' -or $c -eq 'M') {
                 return 'modus'
+            } elseif ($c -eq 'l' -or $c -eq 'L') {
+                return 'sprache'
             }
         }
     }
@@ -309,6 +370,17 @@ function Invoke-UwhPickerKey {
 # ------------------------------------------------------------------
 # Eingaben
 # ------------------------------------------------------------------
+
+# Ja und Nein in allen fuenf Sprachen: j, y, o (oui) und s (si) heissen ja.
+function Test-UwhJa {
+    param([string]$Text)
+    return ([string]$Text).Trim() -match '^(j|ja|y|yes|o|oui|s|si|sì|sí|true)$'
+}
+
+function Test-UwhNein {
+    param([string]$Text)
+    return ([string]$Text).Trim() -match '^(n|nein|no|non|false)$'
+}
 
 function Read-UwhInline {
     param([string]$Label)
@@ -326,6 +398,9 @@ function Read-UwhInline {
     return $value.Trim()
 }
 
+# Antworten auf Ja/Nein-Fragen heissen intern immer 'ja' oder 'nein' - so
+# stehen sie in Profilen und so kommen sie in den Skripten an, egal in
+# welcher Sprache gefragt wurde.
 function Read-UwhAnswer {
     param($Prompt, [string]$Preset)
 
@@ -333,13 +408,13 @@ function Read-UwhAnswer {
 
     while ($true) {
         if ($Prompt.Type -eq 'yesno') {
-            $hint = if ($default -match '^(j|ja|y|yes|true)$') { '[J/n]' } else { '[j/N]' }
+            $hint = if (Test-UwhJa $default) { T 'yesno.yes' } else { T 'yesno.no' }
             Write-Host ("  {0} {1} " -f $Prompt.Question, $hint) -NoNewline
             $in = (Read-Host).Trim()
             if ($in -eq '') { $in = $default }
-            if ($in -match '^(j|ja|y|yes|true)$')  { return 'ja' }
-            if ($in -match '^(n|nein|no|false)$')  { return 'nein' }
-            Write-Host '  Bitte j oder n eingeben.' -ForegroundColor Yellow
+            if (Test-UwhJa $in)   { return 'ja' }
+            if (Test-UwhNein $in) { return 'nein' }
+            Write-Host ('  ' + (T 'yesno.again')) -ForegroundColor Yellow
             continue
         }
 
@@ -359,21 +434,21 @@ function Read-UwhAnswer {
 
         # Ohne Vorgabe geht es ohne Antwort nicht weiter - dann muss man auch
         # wissen, wie man wieder herauskommt.
-        Write-Host '  Ohne Angabe geht es hier nicht weiter.' -ForegroundColor Yellow
-        Write-Host '  Abbrechen mit Strg+C.' -ForegroundColor DarkGray
+        Write-Host ('  ' + (T 'input.required')) -ForegroundColor Yellow
+        Write-Host ('  ' + (T 'input.cancel')) -ForegroundColor DarkGray
     }
 }
 
 function Read-UwhConfirm {
     param([string]$Question, [bool]$Default = $true)
 
-    $hint = if ($Default) { '[J/n]' } else { '[j/N]' }
+    $hint = if ($Default) { T 'yesno.yes' } else { T 'yesno.no' }
     while ($true) {
         Write-Host ("  {0} {1} " -f $Question, $hint) -NoNewline
         $in = (Read-Host).Trim()
         if ($in -eq '') { return $Default }
-        if ($in -match '^(j|ja|y|yes)$') { return $true }
-        if ($in -match '^(n|nein|no)$')  { return $false }
+        if (Test-UwhJa $in)   { return $true }
+        if (Test-UwhNein $in) { return $false }
     }
 }
 
@@ -388,29 +463,25 @@ function Show-UwhSummary {
     $script:UwhLastHeight = 0
     Clear-Host
 
-    $lines = Get-UwhHeader 'Das wird jetzt gemacht'
+    $lines = Get-UwhHeader (T 'summary.title')
     $lines += New-UwhLine ''
 
     foreach ($item in $Plan.Items) {
         $entry = Get-UwhEntry $Catalog $item.Key
         $name = if ($entry) { $entry.Name } else { $item.Key }
-        $verb = switch ($item.Action) {
-            'install'   { 'installieren' }
-            'update'    { 'aktualisieren' }
-            'uninstall' { 'entfernen' }
-            default     { $item.Action }
-        }
+        $verb = if ($item.Action -in $script:UwhModi) { T "summary.$($item.Action)" } else { $item.Action }
         $lines += New-UwhLine ('   - {0} {1}' -f $name.PadRight(30), $verb)
     }
 
+    $anzahl = $Plan.Items.Count
     $lines += New-UwhLine ''
     $lines += New-UwhRule
-    $lines += New-UwhLine ('  {0} Schritte' -f $Plan.Items.Count)
-    if ($Plan.NeedsAdmin)  { $lines += New-UwhLine '  Windows fragt gleich nach Administratorrechten.' }
-    if ($Plan.MayReboot)   { $lines += New-UwhLine '  Ein Neustart kann noetig sein - uwh macht danach allein weiter.' }
+    $lines += New-UwhLine ('  ' + $(if ($anzahl -eq 1) { T 'summary.step' $anzahl } else { T 'summary.steps' $anzahl }))
+    if ($Plan.NeedsAdmin)  { $lines += New-UwhLine ('  ' + (T 'summary.admin')) }
+    if ($Plan.MayReboot)   { $lines += New-UwhLine ('  ' + (T 'summary.reboot')) }
     $lines += New-UwhRule
 
     $lines | ForEach-Object { Write-Host $_ }
     Write-Host ''
-    return (Read-UwhConfirm 'Jetzt starten?' $true)
+    return (Read-UwhConfirm (T 'summary.start') $true)
 }

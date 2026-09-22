@@ -11,7 +11,8 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers')) { . (Join-Path $root "classes\$lib.ps1") }
+Set-UwhLanguage 'de'
 Set-UwhLogFile (Join-Path $env:TEMP 'uwh-online.log')
 
 $exe = Get-UwhWinget
@@ -28,15 +29,17 @@ $fehler = New-Object System.Collections.Generic.List[string]
 Write-Host ''
 Write-Host 'Kennungen' -ForegroundColor Cyan
 
-# --- winget und Microsoft Store ---
+# --- winget und Microsoft Store - jede Kennung, auch die je Sprache ---
 foreach ($e in @($catalog.Entries | Where-Object { $_.Provider -in @('winget', 'msstore') })) {
-    $null = & $exe show --id $e.Id --exact --source $e.Provider `
-                        --disable-interactivity --accept-source-agreements 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host ("  ok    {0,-18} {1}" -f $e.Key, $e.Id) -ForegroundColor DarkGreen
-    } else {
-        $fehler.Add(("{0}: '{1}' gibt es in der Quelle '{2}' nicht" -f $e.Key, $e.Id, $e.Provider))
-        Write-Host ("  FEHL  {0,-18} {1}" -f $e.Key, $e.Id) -ForegroundColor Red
+    foreach ($id in @($e.Ids)) {
+        $null = & $exe show --id $id --exact --source $e.Provider `
+                            --disable-interactivity --accept-source-agreements 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ("  ok    {0,-18} {1}" -f $e.Key, $id) -ForegroundColor DarkGreen
+        } else {
+            $fehler.Add(("{0}: '{1}' gibt es in der Quelle '{2}' nicht" -f $e.Key, $id, $e.Provider))
+            Write-Host ("  FEHL  {0,-18} {1}" -f $e.Key, $id) -ForegroundColor Red
+        }
     }
 }
 
@@ -106,7 +109,7 @@ $vorher = @(Get-ChildItem -Path $env:TEMP -Filter 'uwh-*' -File -ErrorAction Sil
 # Falsche Pruefsumme: Ablehnung, BEVOR irgendetwas ausgefuehrt wird.
 $r = Invoke-UwhUrl (Neuer-UrlEintrag 'https://example.com/' ('0' * 64)) 'install'
 Pruefe 'Falsche Pruefsumme wird abgelehnt' `
-       ($r.Status -eq 'fehler' -and $r.Message -like '*Pruefsumme*') "$($r.Status) / $($r.Message)"
+       ($r.Status -eq 'fehler' -and $r.Message -like '*Prüfsumme*') "$($r.Status) / $($r.Message)"
 
 # Unerreichbare Adresse: sauberer Fehler statt Absturz.
 $r2 = Invoke-UwhUrl (Neuer-UrlEintrag 'https://gibtesnicht.invalid/setup.exe' '') 'install'

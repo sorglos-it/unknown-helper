@@ -7,10 +7,12 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-foreach ($lib in @('core', 'yaml', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
+foreach ($lib in @('core', 'yaml', 'lang', 'repos', 'catalog', 'providers', 'menu', 'execute', 'profiles', 'update')) {
     . (Join-Path $root "classes\$lib.ps1")
 }
 $global:UwhVersion = 'test'
+# Gepruefte Texte sind deutsch - unabhaengig davon, wie Windows eingestellt ist.
+Set-UwhLanguage 'de'
 
 # Ablage waehrend des Tests in einen eigenen Ordner legen.
 $sandkasten = Join-Path $env:TEMP ('uwh-test-{0}' -f [guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -89,11 +91,14 @@ Test-Case 'Jeder Eintrag hat Name und Beschreibung' {
 }
 
 Test-Case 'Keine doppelten Paketkennungen' {
+    # Auch die Kennungen je Sprache zaehlen mit (Mozilla.Firefox.de usw.).
     $gesehen = @{}
     foreach ($e in $script:catalog.Entries) {
-        if (-not $e.Id) { continue }
-        if ($gesehen.ContainsKey($e.Id)) { throw "Kennung '$($e.Id)' kommt zweimal vor" }
-        $gesehen[$e.Id] = $true
+        foreach ($id in @($e.Ids)) {
+            if (-not $id) { continue }
+            if ($gesehen.ContainsKey($id)) { throw "Kennung '$id' kommt zweimal vor" }
+            $gesehen[$id] = $true
+        }
     }
 }
 
@@ -323,10 +328,14 @@ Test-Case 'Menuezeilen haben durchgehend dieselbe Breite' {
     }
 }
 
-Test-Case 'Kein Name und keine Beschreibung wird abgeschnitten' {
+Test-Case 'Kein Name und keine Beschreibung wird abgeschnitten - in keiner Sprache' {
     foreach ($e in $script:catalog.Entries) {
-        if ($e.Name.Length -gt 24) { throw "Name zu lang: '$($e.Name)' ($($e.Name.Length))" }
-        if ($e.Description.Length -gt 31) { throw "Beschreibung zu lang bei '$($e.Key)' ($($e.Description.Length))" }
+        foreach ($name in @($e.Texte.name.Values)) {
+            if ($name.Length -gt 24) { throw "Name zu lang: '$name' ($($name.Length))" }
+        }
+        foreach ($desc in @($e.Texte.description.Values)) {
+            if ($desc.Length -gt 31) { throw "Beschreibung zu lang bei '$($e.Key)': '$desc' ($($desc.Length))" }
+        }
     }
 }
 
@@ -702,6 +711,13 @@ Test-Case 'Menue: die drei Modi wechseln im Kreis' {
     Assert-Equal 'update'    (Get-UwhModus 7).Name 'auch nach mehreren Runden'
 }
 
+Test-Case 'Menue: L meldet den Sprachwechsel' {
+    $m = Neues-Menue
+    Assert-Equal 'sprache' (Druecke $m (Taste 'L' 'l')) 'klein geschrieben'
+    Assert-Equal 'sprache' (Druecke $m (Taste 'L' 'L')) 'gross geschrieben'
+    Assert-Equal 0 $m.Wahl.Keys.Count 'die Auswahl bleibt unberuehrt'
+}
+
 Test-Case 'Menue: M meldet den Moduswechsel' {
     $m = Neues-Menue
     Assert-Equal 'modus' (Druecke $m (Taste 'M' 'm')) 'klein geschrieben'
@@ -774,7 +790,7 @@ function Rufe-Uwh {
         $p = Start-Process -FilePath $exe -Wait -PassThru -NoNewWindow `
              -RedirectStandardOutput $datei `
              -ArgumentList (@('-NoProfile', '-ExecutionPolicy', 'Bypass',
-                              '-File', (Join-Path $root 'uwh.ps1'), '-NoUpdate') + $Argumente)
+                              '-File', (Join-Path $root 'uwh.ps1'), '-NoUpdate', '-Language', 'de') + $Argumente)
         $text = if (Test-Path $datei) { Get-Content -LiteralPath $datei -Raw } else { '' }
         return [pscustomobject]@{ Code = $p.ExitCode; Text = [string]$text }
     } finally {

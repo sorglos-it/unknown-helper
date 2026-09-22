@@ -26,24 +26,25 @@ Already have a copy of the folder? Then a double-click on
 
 ## Usage
 
-The menu is in German:
+uwh speaks English, German, French, Italian and Spanish – the same language as
+Windows. `L` switches the language, and uwh remembers the choice.
 
 ```text
 +============================================================================+
-|  uwh - unknown windows helper                                      v0.1.0  |
+|  uwh - unknown windows helper                                      v0.2.0  |
 +============================================================================+
-|  Was soll installiert werden?                                              |
+|  What should be installed?                                                 |
 +============================================================================+
 |                                                                            |
-|  GRUNDAUSSTATTUNG                                                          |
-|    [x] 7-Zip                    Packt und entpackt Archive                 |
-|  > [ ] Everything               Findet Dateien sofort                      |
-|    [x] Notepad++                Texteditor                      installiert|
+|  ESSENTIALS                                                                |
+|    [x] 7-Zip                    Packs and unpacks archives                 |
+|  > [ ] Everything               Finds files instantly                      |
+|    [x] Notepad++                Text editor                     installed  |
 |                                                                            |
 +============================================================================+
-|  Pfeile Bewegen   LEER An/Aus   ENTER Weiter   / Suchen   ESC Beenden      |
-|  A alle an/aus    P Profil laden    M Modus: Installieren                  |
-|                                                          2 ausgewaehlt     |
+|  Arrows Move   SPACE On/Off   ENTER Next   / Search   ESC Quit             |
+|  A all on/off   P Load profile   M Mode: Install   L Language: English     |
+|                                                                2 selected  |
 +============================================================================+
 ```
 
@@ -56,7 +57,10 @@ The menu is in German:
 | `A` | all on or off |
 | `P` | load a profile |
 | `M` | mode: install → update → remove |
+| `L` | language: Deutsch → English → Français → Italiano → Español |
 | Esc | quit |
+
+A fixed language for one run, e.g. French: `.\uwh.ps1 -Language fr`.
 
 All questions come first. After that everything runs on its own, even across a
 restart.
@@ -75,6 +79,8 @@ Profiles are stored in `apps\cli\data\profiles\`. Passwords are never saved.
 ## Your own programs
 
 Add them to `apps\cli\data\eigene\config.yaml` — the top of the file says how.
+Translations are optional: `description` counts for every language,
+`descriptionDE`, `descriptionFR` and so on override it.
 `apps\cli\data\` and `apps\cli\config\` are yours: an update of uwh never
 touches them.
 

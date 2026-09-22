@@ -107,7 +107,7 @@ function Get-UwhRepos {
 function ConvertTo-UwhRepo {
     param([string]$Id, $Daten)
 
-    if (-not (Test-UwhSafeName $Id)) { throw 'Kennung enthaelt unerlaubte Zeichen.' }
+    if (-not (Test-UwhSafeName $Id)) { throw (T 'repo.badid') }
     if (-not ($Daten -is [System.Collections.IDictionary])) { $Daten = [ordered]@{} }
 
     # Der Ordner liegt immer unter data\. Anders als ulh erlaubt uwh keine
@@ -115,24 +115,26 @@ function ConvertTo-UwhRepo {
     # nie anfasst.
     $ordner = [string](Get-UwhField $Daten 'path')
     if (-not $ordner) { $ordner = $Id }
-    if (-not (Test-UwhSafeName $ordner)) { throw "path '$ordner' muss ein einfacher Ordnername sein." }
-    if ($ordner -in @('profiles', 'keys', 'state', 'logs')) { throw "path '$ordner' ist fuer uwh selbst reserviert." }
+    if (-not (Test-UwhSafeName $ordner)) { throw (T 'repo.badpath' $ordner) }
+    if ($ordner -in @('profiles', 'keys', 'state', 'logs')) { throw (T 'repo.reserved' $ordner) }
 
     $url = [string](Get-UwhField $Daten 'url')
     if ($url -and -not (Test-UwhRepoUrl $url)) {
-        throw "url '$url' ist keine erlaubte Adresse (https, ssh, git@... oder file:///)."
+        throw (T 'repo.badurl' $url)
     }
 
     $auth = [string](Get-UwhField $Daten 'auth_method')
     if (-not $auth) { $auth = 'none' }
-    if ($script:UwhRepoAuth -notcontains $auth) { throw "auth_method '$auth' gibt es nicht." }
+    if ($script:UwhRepoAuth -notcontains $auth) { throw (T 'repo.badauth' $auth) }
 
-    $name = [string](Get-UwhField $Daten 'name')
-    if (-not $name) { $name = $Id }
+    # Der Name darf wie im Katalog uebersetzt sein: name, nameDE, nameFR ...
+    $namen = Get-UwhVariants $Daten 'name'
+    if (-not $namen['']) { $namen[''] = $Id }
 
     [pscustomobject]@{
         Id         = $Id
-        Name       = $name
+        Name       = Select-UwhText $namen
+        Namen      = $namen
         Url        = $url
         Ordner     = $ordner
         Pfad       = Join-Path (Get-UwhDataDir) $ordner
@@ -151,6 +153,7 @@ function ConvertTo-UwhRepo {
 function Initialize-UwhEigenes {
     $paare = @(
         @{ Von = (Get-UwhPath 'config\repo.yaml.example'); Nach = (Join-Path (Get-UwhConfigDir) 'repo.yaml') }
+        @{ Von = (Get-UwhPath 'config\settings.yaml.example'); Nach = (Join-Path (Get-UwhConfigDir) 'settings.yaml') }
         @{ Von = (Get-UwhPath 'templates\eigene.yaml');      Nach = (Join-Path (Get-UwhDataDir) 'eigene\config.yaml') }
     )
     # Das Beispielprofil nur beim allerersten Start - wer es loescht, will es nicht zurueck.
@@ -314,17 +317,17 @@ function Invoke-UwhRepoMitWiederholung {
 
     if (-not (Get-UwhGit)) {
         if (-not $script:UwhGitGewarnt -and -not $Quiet) {
-            Write-UwhWarn 'git fehlt - eigene Repos aus dem Netz werden nicht geholt. Lokale Repos gehen weiterhin.'
+            Write-UwhWarn (T 'repo.nogit')
             $script:UwhGitGewarnt = $true
         }
         return $false
     }
 
     if ($Was -eq 'clone') {
-        if (-not $Quiet) { Write-UwhInfo "Hole eigenes Repo '$($Repo.Name)'..." }
+        if (-not $Quiet) { Write-UwhInfo (T 'repo.cloning' $Repo.Name) }
         $argumente = @('clone', '--quiet', $Repo.Url, $Repo.Pfad)
     } else {
-        if (-not $Quiet) { Write-UwhInfo "Aktualisiere eigenes Repo '$($Repo.Name)'..." }
+        if (-not $Quiet) { Write-UwhInfo (T 'repo.pulling' $Repo.Name) }
         # safe.directory nur fuer diesen einen Aufruf: auf dem NAS gehoert der
         # Ordner einer fremden Kennung, und git verweigert sonst die Arbeit.
         $argumente = @('-c', 'safe.directory=*', '-C', $Repo.Pfad, 'pull', '--ff-only', '--quiet')
@@ -339,8 +342,8 @@ function Invoke-UwhRepoMitWiederholung {
     }
 
     if (-not $Quiet) {
-        $was = if ($Was -eq 'clone') { 'geholt' } else { 'aktualisiert' }
-        Write-UwhWarn "Eigenes Repo '$($Repo.Name)' konnte nicht $was werden. Details im Protokoll."
+        $schluessel = if ($Was -eq 'clone') { 'repo.clonefail' } else { 'repo.pullfail' }
+        Write-UwhWarn (T $schluessel $Repo.Name)
     }
     return $false
 }
