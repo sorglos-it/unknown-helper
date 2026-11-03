@@ -1242,6 +1242,18 @@ render_unit() {
 		'# the same number itself (runtime.EnsureRun), so 0700 here only disagreed' \
 		'# with the program it starts.' \
 		'RuntimeDirectoryMode=0711' \
+		'# And it SURVIVES a stop of the service. Without this line systemd removes' \
+		'# /run/ngc when the unit goes down - which is also what happens between a' \
+		'# crash and the restart. Rootless podman keeps one directory per container' \
+		'# in there, notices at the next call that it is gone, and refreshes its own' \
+		'# state; after that it believes nothing runs, while the processes of every' \
+		'# app live on, because they no longer sit in the cgroup of this unit. The' \
+		'# controller then starts a SECOND process set beside each one, on the same' \
+		'# data directory, once per start of it. Measured on 30.10.2026 on a node of' \
+		'# a running plant (nextgencloud, point 98 of the book): three sets per app' \
+		'# after two restarts, two of them running the PREVIOUS version of the' \
+		'# program on the data of the new one.' \
+		'RuntimeDirectoryPreserve=yes' \
 		'' \
 		'[Install]' \
 		'WantedBy=multi-user.target'

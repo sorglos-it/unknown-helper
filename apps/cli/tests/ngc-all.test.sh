@@ -330,6 +330,11 @@ check "ngc-controller.service: RestartSec=5" \
 # app runs as its own user, so it has to walk THROUGH here to reach its own.
 check "ngc-controller.service (ngc-all): /run/ngc lets an app through (0711)" \
     grep -qx 'RuntimeDirectoryMode=0711' "${alldir}/unit-ctrl.got"
+# And the same for the line that keeps it: this unit is compared line by line
+# here, so a line without a case of its own is a line no mutant can kill - the
+# comment above says it happened to 0711 once already.
+check "ngc-controller.service (ngc-all): /run/ngc survives a stop" \
+    grep -qx 'RuntimeDirectoryPreserve=yes' "${alldir}/unit-ctrl.got"
 check "ngc-api.service carries the same restart" \
     test "$(grep -cx 'Restart=on-failure' "${alldir}/unit-api.got")" = 1
 # This is the one thing a script can do about two programs on one file: the API
