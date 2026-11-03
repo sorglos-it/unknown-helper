@@ -1250,7 +1250,7 @@ render_unit() {
 		'# app live on, because they no longer sit in the cgroup of this unit. The' \
 		'# controller then starts a SECOND process set beside each one, on the same' \
 		'# data directory, once per start of it. Measured on 30.10.2026 on a node of' \
-		'# a running plant (nextgencloud, point 98 of the book): three sets per app' \
+		'# a running plant (nextgencloud, point 102 of the book): three sets per app' \
 		'# after two restarts, two of them running the PREVIOUS version of the' \
 		'# program on the data of the new one.' \
 		'RuntimeDirectoryPreserve=yes' \
