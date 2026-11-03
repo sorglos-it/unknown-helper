@@ -76,7 +76,9 @@ jobs:
         # NOT the exit code, and not the word at the end: the driver prints
         # "passed: N  failed: M" and a run in which NOTHING ran prints
         # "passed: 0  failed: 0" and exits 0. The floor is what makes that red.
-        # It is set from the first green run of this file and the run it came
-        # from is named beside it, so a suite that silently loses half its
-        # cases cannot pass as green.
-        run: NGC_ULH_FLOOR=1 bash tools/ci-count.sh "${{ runner.temp }}/tests.log"
+        # 800, measured: the first run of this file (41742357650, 4.11.2026)
+        # counted 834 cases, 831 of them passed. On a Windows machine with WSL
+        # the same suite reports 373 passed and 458 failed, every failure there
+        # downstream of a temporary repository that cannot be created on it -
+        # which is why no number could be set before this file existed.
+        run: NGC_ULH_FLOOR=800 bash tools/ci-count.sh "${{ runner.temp }}/tests.log"
