@@ -1,0 +1,82 @@
+# What this run is for: this repository had NO run at all until 4.11.2026.
+# Measured, not assumed: there was no .github folder in main, and the check-runs
+# API answered total_count 0 for every commit. A pull request therefore showed
+# CLEAN - and CLEAN does not mean "checked and green" there, it means NOTHING
+# CHECKED. The suite existed the whole time (apps/cli/tests/run.sh, run by hand
+# on Linux) and nobody started it.
+#
+# That matters more here than in most repositories: a push to main of this
+# repository reaches every user at once through the self-update. Until this
+# file existed, what reached them had been measured by whoever happened to
+# remember.
+#
+# IT ONLY MEASURES. It publishes nothing, pushes nothing, needs no secret, and
+# asks for read permission only. The suite installs nothing: sudo, the package
+# managers and the network are stubs inside a temporary folder (run.sh).
+name: Linux-Pruefung
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A second push to the same branch cancels the first. Keyed on the BRANCH and
+# not on github.ref, because a branch with an open pull request fires both
+# events and github.ref is a different string for each ("refs/heads/<branch>"
+# against "refs/pull/<n>/merge") - keyed on github.ref the two runs land in two
+# groups and BOTH run.
+#
+# The displaced run leaves a "cancelled" mark on the commit, and GitHub counts
+# it, so every pull request of such a repository reads UNSTABLE. cancelled is
+# not a failure: read the conclusion PER RUN, never the summary line.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: apps/cli/tests + counted run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: shellcheck holen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends shellcheck
+      - name: syntax
+        # Every shell file parsed before anything is run. A syntax error in a
+        # shipped script is the one fault that reaches a user in full, because
+        # the self-update hands it over unread.
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            bash -n "$f" || { echo "SYNTAX: $f"; fail=1; }
+          done < <(git ls-files '*.sh')
+          echo "geparst: $(git ls-files '*.sh' | wc -l) Dateien"
+          exit $fail
+      - name: laufen
+        # The driver needs an identity for its own temporary repository: it
+        # does git init / add / commit inside a temporary folder, and a runner
+        # has no global one. Without it the commit fails, the clone after it
+        # fails, and HUNDREDS of cases go red for a reason that has nothing to
+        # do with the code - measured on this machine on 3.11.2026 (373 passed,
+        # 458 failed, every failure downstream of "remote.git does not exist").
+        run: |
+          git config --global user.email "noreply@sorglos.local"
+          git config --global user.name "ulh tests"
+          bash apps/cli/tests/run.sh > "${{ runner.temp }}/tests.log" 2>&1 || true
+          cat "${{ runner.temp }}/tests.log"
+      - name: zaehlen
+        # NOT the exit code, and not the word at the end: the driver prints
+        # "passed: N  failed: M" and a run in which NOTHING ran prints
+        # "passed: 0  failed: 0" and exits 0. The floor is what makes that red.
+        # It is set from the first green run of this file and the run it came
+        # from is named beside it, so a suite that silently loses half its
+        # cases cannot pass as green.
+        run: NGC_ULH_FLOOR=1 bash tools/ci-count.sh "${{ runner.temp }}/tests.log"
