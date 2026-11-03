@@ -266,6 +266,18 @@ RuntimeDirectory=ngc
 # the same number itself (runtime.EnsureRun), so 0700 here only disagreed
 # with the program it starts.
 RuntimeDirectoryMode=0711
+# And it SURVIVES a stop of the service. Without this line systemd removes
+# /run/ngc when the unit goes down - which is also what happens between a
+# crash and the restart. Rootless podman keeps one directory per container
+# in there, notices at the next call that it is gone, and refreshes its own
+# state; after that it believes nothing runs, while the processes of every
+# app live on, because they no longer sit in the cgroup of this unit. The
+# controller then starts a SECOND process set beside each one, on the same
+# data directory, once per start of it. Measured on 30.10.2026 on a node of
+# a running plant (nextgencloud, point 102 of the book): three sets per app
+# after two restarts, two of them running the PREVIOUS version of the
+# program on the data of the new one.
+RuntimeDirectoryPreserve=yes
 
 [Install]
 WantedBy=multi-user.target
@@ -279,6 +291,12 @@ check "ngc-controller.service starts the program out of /usr/lib/ngc" \
 # lock does not start on purpose, and the restart is this file's job. The
 # distance is a few seconds, never anywhere near the 900 seconds of the lock -
 # the lock falls as soon as the other run is finished.
+# /run/ngc has to survive a stop of the service: without it systemd deletes it,
+# podman refreshes its state, and the controller starts a second process set per
+# app on the same data (nextgencloud, point 97). The byte comparison above
+# would only say "something differs" - this case says which line is missing.
+check "ngc-controller.service keeps /run/ngc across a stop" \
+    grep -qx 'RuntimeDirectoryPreserve=yes' "${ctldir}/unit.got"
 check "ngc-controller.service restarts after a failure" \
     grep -q '^Restart=on-failure$' "${ctldir}/unit.got"
 check "ngc-controller.service waits a few seconds before it tries again" \
