@@ -1061,6 +1061,20 @@ render_unit() {
 		'# the same number itself (runtime.EnsureRun), so 0700 here only disagreed' \
 		'# with the program it starts.' \
 		'RuntimeDirectoryMode=0711' \
+		'# And it SURVIVES a stop of this service, for the same reason the' \
+		'# controller carries the line: BOTH units name the SAME directory' \
+		'# (RuntimeDirectory=ngc), and systemd removes a shared runtime directory' \
+		'# as soon as ONE of them goes down without this line. Measured on' \
+		'# 4.11.2026, systemd 257, two rebuilt units: with Preserve on A only, a' \
+		'# stop of B left /run/probe GONE, a systemctl restart of B and a SIGKILL' \
+		'# of B left it EMPTY, while A kept running throughout; with the line on B' \
+		'# as well the content stood. So without it every stop, restart or crash of' \
+		'# the API wipes the runtime directory under the RUNNING controller - which' \
+		'# is exactly the state point 102 counts: rootless podman refreshes its' \
+		'# state, believes nothing runs, and the controller lays a second process' \
+		'# set beside each app on the same data. On ngc-api-1 both units stand side' \
+		'# by side (read on 4.11.2026), so this is not a thought but that machine.' \
+		'RuntimeDirectoryPreserve=yes' \
 		'NoNewPrivileges=yes' \
 		'ProtectSystem=strict' \
 		'ProtectHome=yes' \

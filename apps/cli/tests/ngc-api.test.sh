@@ -224,6 +224,20 @@ RuntimeDirectory=ngc
 # the same number itself (runtime.EnsureRun), so 0700 here only disagreed
 # with the program it starts.
 RuntimeDirectoryMode=0711
+# And it SURVIVES a stop of this service, for the same reason the
+# controller carries the line: BOTH units name the SAME directory
+# (RuntimeDirectory=ngc), and systemd removes a shared runtime directory
+# as soon as ONE of them goes down without this line. Measured on
+# 4.11.2026, systemd 257, two rebuilt units: with Preserve on A only, a
+# stop of B left /run/probe GONE, a systemctl restart of B and a SIGKILL
+# of B left it EMPTY, while A kept running throughout; with the line on B
+# as well the content stood. So without it every stop, restart or crash of
+# the API wipes the runtime directory under the RUNNING controller - which
+# is exactly the state point 102 counts: rootless podman refreshes its
+# state, believes nothing runs, and the controller lays a second process
+# set beside each app on the same data. On ngc-api-1 both units stand side
+# by side (read on 4.11.2026), so this is not a thought but that machine.
+RuntimeDirectoryPreserve=yes
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -261,6 +275,21 @@ check "ngc-api.service: byte for byte what the script writes" \
     cmp -s "${apidir}/unit.want" "${apidir}/unit.got"
 check "ngc-api.service starts the program out of /usr/lib/ngc" \
     grep -q '^ExecStart=/usr/lib/ngc/ngc-api -config /etc/ngc/api.json$' "${apidir}/unit.got"
+
+# /run/ngc has to survive a stop of THIS service too, and not only of the
+# controller's: both units name the same RuntimeDirectory=ngc, and systemd
+# removes a shared runtime directory as soon as one of the two goes down
+# without this line. Measured on 4.11.2026 (systemd 257): a stop of the unit
+# without it took the directory away under the unit WITH it, a restart and a
+# SIGKILL emptied it, and with the line on both the content stood. On
+# ngc-api-1 the two units stand side by side. The byte comparison above would
+# only say "something differs" - this case says which line is missing.
+check "ngc-api.service: /run/ngc survives a stop of the API"     grep -qx 'RuntimeDirectoryPreserve=yes' "${apidir}/unit.got"
+# And WHERE it stands, which is the difference between effective and silently
+# discarded: systemd reads a setting only inside the section it belongs to, so
+# a RuntimeDirectoryPreserve= behind [Install] is thrown away without a word.
+# The case above would be just as green for it.
+check "ngc-api.service: the line stands in [Service] and not behind [Install]"     test "$(grep -n -x 'RuntimeDirectoryPreserve=yes' "${apidir}/unit.got" | cut -d: -f1)"          -lt "$(grep -n -x '\[Install\]' "${apidir}/unit.got" | cut -d: -f1)"
 
 # --------------------------------------------------- hosts, names, addresses
 # The same cases as shared/testdata/ulh/host.sh: a name in lower case or an
