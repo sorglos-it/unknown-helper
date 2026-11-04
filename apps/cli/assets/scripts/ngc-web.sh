@@ -790,11 +790,12 @@ cert_fits() {
 	if ! openssl x509 -in "$NGC_CERT" -noout -checkend 2592000 >/dev/null 2>&1; then
 		return 1
 	fi
-	if is_ipv4 "$NGC_HOSTNAME"; then
-		openssl x509 -in "$NGC_CERT" -noout -checkip "$NGC_HOSTNAME" >/dev/null 2>&1
-	else
-		openssl x509 -in "$NGC_CERT" -noout -checkhost "$NGC_HOSTNAME" >/dev/null 2>&1
-	fi
+	# cert_covers_name (classes/bootstrap.sh), not the exit code of openssl:
+	# below OpenSSL 3.5 "-checkhost <foreign-name>" and "-checkip <foreign
+	# address>" both end with 0 and only SAY that it does not match. Reading $?
+	# here left a certificate for a foreign name in place and called it
+	# fitting. It asks both ways itself, so is_ipv4 is not needed around it.
+	cert_covers_name "$NGC_CERT" "$NGC_HOSTNAME"
 }
 
 ensure_cert_selfsigned() {
