@@ -230,6 +230,53 @@ for s in $NGC_SCRIPTS; do
 done
 check "every script sets LC_ALL=C above its host check" test "$nolc" = 0
 
+# ------------------------------------------------- cert_covers_name itself
+# The name check of all four ngc scripts sits in classes/bootstrap.sh, so these
+# cases ask IT and not a script around it. That is the point: they are the
+# only cases in the suite that reach this door.
+#
+# Measured on 4.11.2026 with a mutant per line, on OpenSSL 3.0.13 and 3.5.7:
+# asked through ngc-web's cert_fits, two of the lines in this function could be
+# bent WITHOUT a single case going red.
+#
+#   "an answer nobody knows counts as fitting" survived, because a file that is
+#   no certificate is already refused one line earlier by -checkend, so the
+#   junk case never arrives here. openssl answers such a file with NOTHING, and
+#   an empty answer must mean "it does not fit".
+#
+#   "ask -checkhost for an address" survived, because a certificate ngc-web
+#   makes for an address carries that address as its CN as well, and -checkhost
+#   falls back to the CN. It only bites for an IMPORTED certificate whose CN is
+#   something else - which is why the certificate below carries CN=My Company
+#   and the address only in the SAN.
+if command -v openssl > /dev/null 2>&1; then
+    ccn="${TMP}/ccn"
+    mkdir -p "$ccn"
+    openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -noenc \
+        -days 397 -sha256 -subj "/CN=My Company" \
+        -addext "subjectAltName=IP:192.168.1.10" \
+        -keyout "${ccn}/ip.key" -out "${ccn}/ip.crt" > /dev/null 2>&1
+    printf '%s\n' 'not a certificate' > "${ccn}/junk.crt"
+    : > "${ccn}/empty.crt"
+    ccn_fits() ( source "${ULH}/apps/cli/classes/bootstrap.sh"; cert_covers_name "$1" "$2" )
+    check "the preparation made a certificate whose CN is not the address" \
+        test -s "${ccn}/ip.crt"
+    check "cert_covers_name: an address in the SAN fits, CN or no CN" \
+        ccn_fits "${ccn}/ip.crt" 192.168.1.10
+    check "cert_covers_name: and another address does not" \
+        not ccn_fits "${ccn}/ip.crt" 192.168.1.11
+    check "cert_covers_name: a file that is no certificate does not fit" \
+        not ccn_fits "${ccn}/junk.crt" 192.168.1.10
+    check "cert_covers_name: an empty file does not fit" \
+        not ccn_fits "${ccn}/empty.crt" 192.168.1.10
+    check "cert_covers_name: a name the certificate does not carry does not fit" \
+        not ccn_fits "${ccn}/ip.crt" attacker.example.invalid
+    unset -f ccn_fits
+    unset ccn
+else
+    echo "    skipped: openssl is not here, so cert_covers_name was not asked"
+fi
+
 unset -f sh_host all_next all_next_nocert
 unset shdir sdir NGC_SCRIPTS present drift wrong hostcases leaks logged off nolc
 unset alldir2 PIN_STUB
