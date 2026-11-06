@@ -43,6 +43,24 @@ check() {
 }
 not() { ! "$@"; }
 
+# name_fits / name_differs read the SENTENCE that "openssl x509 -checkhost" and
+# "-checkip" print, never their exit code. Measured on 4.11.2026 with one
+# certificate for CN=a.example.org, asked for b.example.org:
+#
+#   OpenSSL 3.0.2 / 3.0.13 / 3.0.22  ->  exit 0, "... does NOT match certificate"
+#   OpenSSL 3.5.7                    ->  exit 1, same sentence
+#
+# Below 3.5 the tool says the verdict and does not signal it. So "not openssl
+# ... -checkhost <foreign>" could NEVER pass there - and, worse, the positive
+# assertion next to it passed for EVERY name and measured nothing. Both halves
+# are read from the output now, and both are positive assertions: each one
+# names the sentence it wants, so neither can be satisfied by silence.
+_cert_said() { openssl x509 -in "$1" -noout "$2" "$3" 2>/dev/null; }
+name_fits()    { _cert_said "$1" -checkhost "$2" | grep -q 'does match certificate'; }
+name_differs() { _cert_said "$1" -checkhost "$2" | grep -q 'does NOT match certificate'; }
+addr_fits()    { _cert_said "$1" -checkip   "$2" | grep -q 'does match certificate'; }
+addr_differs() { _cert_said "$1" -checkip   "$2" | grep -q 'does NOT match certificate'; }
+
 # ---------------------------------------------------------------- stubs
 STUBS="${TMP}/stubs"
 mkdir -p "$STUBS"

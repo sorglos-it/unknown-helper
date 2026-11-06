@@ -718,8 +718,11 @@ cert_fits() {
 	a="$(openssl x509 -in "${NGC_TLS}/node.crt" -noout -pubkey 2>/dev/null)" || return 1
 	b="$(openssl pkey -in "${NGC_TLS}/node.key" -pubout 2>/dev/null)" || return 1
 	[ "$a" = "$b" ] || return 1
-	openssl x509 -in "${NGC_TLS}/node.crt" -noout -checkhost "$NGC_HOSTNAME" > /dev/null 2>&1 ||
-		openssl x509 -in "${NGC_TLS}/node.crt" -noout -checkip "$NGC_HOSTNAME" > /dev/null 2>&1
+	# cert_covers_name (classes/bootstrap.sh), not the exit code of openssl:
+	# below OpenSSL 3.5 "-checkhost <foreign-name>" ends with 0 and only SAYS
+	# that the name does not match. Reading $? here left a certificate for a
+	# foreign name in place and called it fitting.
+	cert_covers_name "${NGC_TLS}/node.crt" "$NGC_HOSTNAME"
 }
 
 # ensure_node_cert writes the request and, on the bootstrap node, the

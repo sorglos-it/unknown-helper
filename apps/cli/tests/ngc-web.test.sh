@@ -855,9 +855,9 @@ if command -v openssl > /dev/null 2>&1; then
     check "certificate: one is made for a name" \
         test "$(ngc_self ngc.example.org selfsigned "${certdir}/name")" = 1
     check "certificate: it answers for that name" \
-        openssl x509 -in "${certdir}/name/web.crt" -noout -checkhost ngc.example.org
+        name_fits "${certdir}/name/web.crt" ngc.example.org
     check "certificate: and not for another one" \
-        not openssl x509 -in "${certdir}/name/web.crt" -noout -checkhost ngc.somebody.else
+        name_differs "${certdir}/name/web.crt" ngc.somebody.else
     check "certificate: its key is 0600" test "$(stat -c %a "${certdir}/name/web.key")" = 600
     check "certificate: the certificate itself is 0644" \
         test "$(stat -c %a "${certdir}/name/web.crt")" = 644
@@ -882,7 +882,24 @@ if command -v openssl > /dev/null 2>&1; then
     check "certificate: one is made for an IP address" \
         test "$(ngc_self 192.168.1.10 selfsigned "${certdir}/ip")" = 1
     check "certificate: it answers for that address" \
-        openssl x509 -in "${certdir}/ip/web.crt" -noout -checkip 192.168.1.10
+        addr_fits "${certdir}/ip/web.crt" 192.168.1.10
+    check "certificate: and not for another address" \
+        addr_differs "${certdir}/ip/web.crt" 192.168.1.11
+    check "cert_fits: the certificate for that address fits" \
+        ngc_fits 192.168.1.10 "${certdir}/ip"
+    check "cert_fits: and not another address" \
+        not ngc_fits 192.168.1.11 "${certdir}/ip"
+    # Without this case a helper that always asks -checkhost would look
+    # right: -checkhost never matches an IP: entry in the SAN.
+    # And a file that is no certificate must not fit either: openssl then
+    # prints no verdict at all, and "no verdict" has to mean "it does not
+    # fit". A helper that falls open on an answer it does not know would
+    # keep whatever lies there.
+    mkdir -p "${certdir}/junk"
+    printf '%s\n' 'not a certificate' > "${certdir}/junk/web.crt"
+    cp -- "${certdir}/name/web.key" "${certdir}/junk/web.key"
+    check "cert_fits: a file that is no certificate does not fit" \
+        not ngc_fits ngc.example.org "${certdir}/junk"
     check "certificate: the SAN says IP and not DNS" \
         grep -q 'IP Address:192.168.1.10' \
             <(openssl x509 -in "${certdir}/ip/web.crt" -noout -text)

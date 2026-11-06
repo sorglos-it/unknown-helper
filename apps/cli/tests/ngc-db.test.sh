@@ -239,9 +239,47 @@ if command -v openssl > /dev/null 2>&1; then
     check "the CA signed the node certificate" \
         openssl verify -CAfile "${o}/ca.crt" "${o}/node.crt"
     check "the node certificate carries the name of the node" \
-        openssl x509 -in "${o}/node.crt" -noout -checkhost db-1.ngc.test
+        name_fits "${o}/node.crt" db-1.ngc.test
     check "and not the name of another node" \
-        not openssl x509 -in "${o}/node.crt" -noout -checkhost db-2.ngc.test
+        name_differs "${o}/node.crt" db-2.ngc.test
+
+    # cert_fits is what makes a second run leave the certificate alone. Until
+    # 4.11.2026 it read the exit code of "openssl x509 -checkhost", and below
+    # OpenSSL 3.5 that code is 0 for a name that does NOT match: on such a
+    # machine a second run kept a certificate made out to ANOTHER node and said
+    # "the certificate of this node fits". Measured on OpenSSL 3.0.2, 3.0.13
+    # and 3.0.22; only 3.5.7 refused it. These two cases are the ones that were
+    # missing - the four lines above check openssl, not cert_fits.
+    db_fits() (
+        db_load
+        NGC_TLS="$1"
+        # shellcheck disable=SC2034
+        NGC_HOSTNAME="$2"
+        cert_fits
+    )
+    check "cert_fits: the node certificate just made fits" \
+        db_fits "$o" db-1.ngc.test
+    check "cert_fits: a certificate for ANOTHER node does not fit" \
+        not db_fits "$o" db-2.ngc.test
+    check "cert_fits: and not for a name nobody signed" \
+        not db_fits "$o" attacker.example.invalid
+    # The key next to it has to be the key of this certificate. A node that
+    # kept a foreign certificate would fail here too - so this case is the one
+    # that must stay sharp on its own, and the name check cannot stand in.
+    cp -- "${o}/node.key" "${o}/node.key.keep"
+    openssl genpkey -algorithm ed25519 -out "${o}/node.key" 2> /dev/null
+    check "cert_fits: a certificate that does not belong to the key does not fit" \
+        not db_fits "$o" db-1.ngc.test
+    cp -- "${o}/node.key.keep" "${o}/node.key"
+    check "cert_fits: and it fits again once the right key is back" \
+        db_fits "$o" db-1.ngc.test
+    # Why cert_covers_name asks only ONE of the two checks: this is the tool
+    # behaviour the choice is there for. -checkip answers "does match" for a
+    # string that is no address at all. If openssl ever stops doing that,
+    # this case goes red and the choice can be looked at again - the reason
+    # stays measured instead of remembered.
+    check "openssl: -checkip with a name that is no address claims a match" \
+        addr_fits "${o}/node.crt" db-2.ngc.test
 else
     echo "    skipped: openssl is not here, so the certificates were not built"
 fi
