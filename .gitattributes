@@ -12,4 +12,4 @@ LICENSE   text eol=lf
 VERSION   text eol=lf
 
 # bundled yq binaries - never touch these
-apps/cli/vendor/yq/* binary
+apps/cli-ulh/vendor/yq/* binary

@@ -2,7 +2,7 @@
 # Measured, not assumed: there was no .github folder in main, and the check-runs
 # API answered total_count 0 for every commit. A pull request therefore showed
 # CLEAN - and CLEAN does not mean "checked and green" there, it means NOTHING
-# CHECKED. The suite existed the whole time (apps/cli/tests/run.sh, run by hand
+# CHECKED. The suite existed the whole time (apps/cli-ulh/tests/run.sh, run by hand
 # on Linux) and nobody started it.
 #
 # That matters more here than in most repositories: a push to main of this
@@ -38,7 +38,7 @@ concurrency:
 
 jobs:
   tests:
-    name: apps/cli/tests + counted run
+    name: apps/cli-ulh/tests + counted run
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -70,7 +70,7 @@ jobs:
         run: |
           git config --global user.email "noreply@sorglos.local"
           git config --global user.name "ulh tests"
-          bash apps/cli/tests/run.sh > "${{ runner.temp }}/tests.log" 2>&1 || true
+          bash apps/cli-ulh/tests/run.sh > "${{ runner.temp }}/tests.log" 2>&1 || true
           cat "${{ runner.temp }}/tests.log"
       - name: zaehlen
         # NOT the exit code, and not the word at the end: the driver prints
@@ -81,4 +81,4 @@ jobs:
         # the same suite reports 373 passed and 458 failed, every failure there
         # downstream of a temporary repository that cannot be created on it -
         # which is why no number could be set before this file existed.
-        run: NGC_ULH_FLOOR=800 bash tools/ci-count.sh "${{ runner.temp }}/tests.log"
+        run: NGC_ULH_FLOOR=800 bash tools/ulh/ci-count.sh "${{ runner.temp }}/tests.log"

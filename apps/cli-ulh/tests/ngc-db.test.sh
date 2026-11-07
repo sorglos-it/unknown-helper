@@ -1,0 +1,1282 @@
+# ngc-db: what can be checked without a database server - the configuration it
+# writes for MariaDB, the OpenSSL configuration for the CA, a real CA with a
+# real node certificate made the way install makes them, and which answers it
+# refuses. Sourced by run.sh.
+#
+# The functions come out of the script itself, so this tests the file that ships
+# and not a copy of it. Each call happens in a subshell, so none of ngc-db's
+# functions stays behind in the test shell.
+#
+# The lines checked below are the same lines TestGaleraTemplate of the NGC
+# repository checks on apps/server-db/templates/galera.cnf. ngc-db carries that
+# template as a here-document, because it installs no NGC program files and so
+# has no release to take it from: that is a second copy, and this test is what
+# keeps the two from drifting apart.
+
+dbdir="${TMP}/ngc-db"
+mkdir -p "$dbdir"
+awk 'f && /^case "\$ACTION" in$/ {exit} /^parse_parameters / {f=1; next} f' \
+    "${ULH}/apps/cli-ulh/assets/scripts/ngc-db.sh" > "${dbdir}/body.sh"
+check "the functions of ngc-db can be read out of it" grep -q '^render_galera() {' "${dbdir}/body.sh"
+
+# db_load is the preamble of every call below: bootstrap for the log_* helpers,
+# then the body of the script.
+db_load() {
+    # shellcheck disable=SC1090,SC1091
+    source "${ULH}/apps/cli-ulh/classes/bootstrap.sh"
+    source "${dbdir}/body.sh"
+    WORK="${dbdir}/work"
+    mkdir -p "$WORK"
+}
+
+NODE1="db-1.ngc.test:3306"
+NODE2="db-2.ngc.test:3306"
+NODE3="db-3.ngc.test:3306"
+PASS1="Pa55word-ngc"
+PASS2="Pa55word-migrate"
+
+db_galera() (
+    db_load
+    NGC_HOSTNAME="${1:-db-1.ngc.test}"
+    NGC_NODES="${NODE1} ${NODE2} ${NODE3}"
+    NGC_BOOTSTRAP=no NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2"
+    NGC_CA_DIR=/etc/ngc/db-ca
+    # read_answers, so NODE_NAME and the node list come out of the script and
+    # not out of this test: a check that sets them itself proves nothing.
+    read_answers > /dev/null 2>&1 || exit 1
+    SST_PASS="0123456789abcdef"
+    # ${2-...}, not ${2:-...}: ${2:-...} also puts the default in for an EMPTY
+    # argument, and the empty list is exactly the case of the very first start.
+    render_galera "${2-$(cluster_list)}"
+)
+db_cacnf() (
+    db_load
+    render_ca_cnf "$1"
+)
+db_answers() (
+    db_load
+    NGC_HOSTNAME="$1" NGC_NODES="$2" NGC_BOOTSTRAP="$3"
+    NGC_PASSWORD_NGC="$4" NGC_PASSWORD_MIGRATE="$5" NGC_CA_DIR="$6"
+    read_answers > /dev/null 2>&1
+)
+db_host() (
+    db_load
+    valid_host "$1"
+)
+db_cluster() (
+    db_load
+    NGC_HOSTNAME=db-1.ngc.test NGC_NODES="$*" NGC_BOOTSTRAP=no
+    NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2" NGC_CA_DIR=/etc/ngc/db-ca
+    read_answers > /dev/null 2>&1 || exit 1
+    cluster_list
+)
+
+# ------------------------------------------------- 60-ngc.cnf: the lines that carry
+db_galera > "${dbdir}/galera.got"
+cat > "${dbdir}/pinned.txt" <<'EOF'
+[mysqld]
+[mariabackup]
+require_secure_transport=ON
+tls_version=TLSv1.3
+ssl_ca=/etc/ngc/db-tls/ca.crt
+ssl_cert=/etc/ngc/db-tls/node.crt
+ssl_key=/etc/ngc/db-tls/node.key
+plugin_load_add=file_key_management
+file_key_management_encryption_algorithm=AES_CTR
+innodb_encrypt_tables=FORCE
+innodb_encrypt_log=ON
+innodb_encrypt_temporary_tables=ON
+encrypt_tmp_disk_tables=ON
+encrypt_binlog=ON
+aria_encrypt_tables=ON
+wsrep_on=ON
+binlog_format=ROW
+default_storage_engine=InnoDB
+innodb_autoinc_lock_mode=2
+max_allowed_packet=128M
+wsrep_sst_method=mariabackup
+sql_mode=STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION
+wsrep_provider=/usr/lib/galera/libgalera_smm.so
+wsrep_cluster_name=ngc
+file_key_management_filename=/etc/ngc/db-keys/keys.enc
+file_key_management_filekey=FILE:/etc/ngc/db-keys/keyfile.key
+EOF
+missing=0
+while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    grep -qxF "$line" "${dbdir}/galera.got" || { missing=$((missing + 1)); echo "    missing: ${line}"; }
+done < "${dbdir}/pinned.txt"
+check "60-ngc.cnf carries every pinned line of galera.cnf (whole lines)" test "$missing" = 0
+
+# The other way round, and this is what makes "every line" checkable instead of
+# a promise: a line the script writes that nobody pins fails the test. The six
+# lines skipped here are the ones that carry a value of this node; each has its
+# own check further down.
+unpinned=0
+while IFS= read -r line; do
+    case "$line" in
+    '' | '#'*) continue ;;
+    wsrep_provider_options=* | wsrep_cluster_address=* | wsrep_node_name=* | \
+        wsrep_node_address=* | wsrep_sst_auth=* | bind-address=*) continue ;;
+    esac
+    grep -qxF "$line" "${dbdir}/pinned.txt" ||
+        { unpinned=$((unpinned + 1)); echo "    not pinned: ${line}"; }
+done < "${dbdir}/galera.got"
+check "every other line the script writes is pinned by this test" test "$unpinned" = 0
+
+# The three ssl_* lines above also stand in [mariabackup]. So they are counted
+# per section as well: a line only in [mariabackup] would leave the server's own
+# TLS off, and a check on the whole text would not see it.
+head=0
+sed -n '/^\[mysqld\]/,/^\[mariabackup\]/p' "${dbdir}/galera.got" > "${dbdir}/mysqld.part"
+for line in ssl_ca=/etc/ngc/db-tls/ca.crt ssl_cert=/etc/ngc/db-tls/node.crt ssl_key=/etc/ngc/db-tls/node.key; do
+    grep -qxF "$line" "${dbdir}/mysqld.part" || { head=$((head + 1)); echo "    not in [mysqld]: ${line}"; }
+done
+check "the three ssl_* lines stand in [mysqld] itself" test "$head" = 0
+back=0
+sed -n '/^\[mariabackup\]/,$p' "${dbdir}/galera.got" > "${dbdir}/backup.part"
+for line in ssl_ca=/etc/ngc/db-tls/ca.crt ssl_cert=/etc/ngc/db-tls/node.crt ssl_key=/etc/ngc/db-tls/node.key; do
+    grep -qxF "$line" "${dbdir}/backup.part" || { back=$((back + 1)); echo "    not in [mariabackup]: ${line}"; }
+done
+check "and in [mariabackup], for the copy to a new node" test "$back" = 0
+
+# The replication is checked against the same CA. One line, so it is grepped as
+# a part of it.
+prov=0
+for part in socket.ssl_ca=/etc/ngc/db-tls/ca.crt socket.ssl_cert=/etc/ngc/db-tls/node.crt \
+    socket.ssl_key=/etc/ngc/db-tls/node.key socket.ssl_cipher=ECDHE-ECDSA-AES256-GCM-SHA384; do
+    grep -qF "$part" "${dbdir}/galera.got" || { prov=$((prov + 1)); echo "    missing: ${part}"; }
+done
+check "wsrep_provider_options carries the CA, the certificate and the cipher list" test "$prov" = 0
+# The loop above holds the rendering against this file's own list, so a wrong
+# value moved into both stays green - the gap Punkt 56 found in the Apache
+# template. This case knows something the rendering does not say about itself:
+# socket.ssl_cipher reaches SSL_CTX_set_cipher_list, which knows TLS 1.2 names
+# only. A TLS 1.3 name (TLS_*) restricts nothing and aborts mariadbd with "no
+# cipher match" - measured on Debian 13 with Galera 26.4.23 on 17.10.2026.
+cipher_val="$(grep -o 'socket[.]ssl_cipher=[^;"]*' "${dbdir}/galera.got" | head -1 | cut -d= -f2)"
+check "the cipher of the cluster is a TLS 1.2 name, not a TLS 1.3 suite" not grep -qE '^TLS_' <<< "$cipher_val"
+# And dropping the option would pass that alone, so the pin has to stay a pin.
+check "the cipher of the cluster still names AES-256-GCM" grep -q 'AES256-GCM' <<< "$cipher_val"
+
+forbidden=0
+for line in skip-ssl ssl=0 require_secure_transport=OFF wsrep_on=OFF \
+    innodb_encrypt_tables=OFF skip-name-resolve=OFF bind-address=0.0.0.0; do
+    if grep -qF "$line" "${dbdir}/galera.got"; then
+        forbidden=$((forbidden + 1)); echo "    there: ${line}"
+    fi
+done
+check "60-ngc.cnf carries none of the forbidden lines" test "$forbidden" = 0
+
+# No mark of the template may survive: a @...@ left in the file would be a host
+# MariaDB cannot read.
+check "no @...@ mark is left in the written configuration" \
+    not grep -qE '@[A-Z_]+@' "${dbdir}/galera.got"
+# db-1.ngc.test resolves nowhere, so these two show the exception and say so:
+# a name that nothing resolves stays, because a first node is installed before
+# it has a DNS entry. The normal case - an address - is checked further down
+# with a getent of its own, and that is the case that matters, since Galera
+# otherwise picks the address itself and told a donor a name it could not reach.
+check "a name that nothing resolves stays in wsrep_node_address" \
+    grep -qx 'wsrep_node_address=db-1.ngc.test' "${dbdir}/galera.got"
+check "and in bind-address" \
+    grep -qx 'bind-address=db-1.ngc.test' "${dbdir}/galera.got"
+check "wsrep_node_name is the first label of the host" \
+    grep -qx 'wsrep_node_name=db-1' "${dbdir}/galera.got"
+check "the cluster address carries every node" \
+    grep -qx 'wsrep_cluster_address=gcomm://db-1.ngc.test,db-2.ngc.test,db-3.ngc.test' "${dbdir}/galera.got"
+# The very first start of the first node opens the cluster with an empty list.
+check "an empty list gives gcomm:// for the very first start" \
+    grep -qx 'wsrep_cluster_address=gcomm://' <(db_galera db-1.ngc.test "")
+check "the SST password is not left as a mark" \
+    grep -qx 'wsrep_sst_auth=sst:0123456789abcdef' "${dbdir}/galera.got"
+check "cluster_list takes the hosts out of the node list" \
+    test "$(db_cluster "$NODE1" "$NODE2" "$NODE3")" = "db-1.ngc.test,db-2.ngc.test,db-3.ngc.test"
+
+# ------------------------------------------------- db-ca.cnf
+db_cacnf db-1.ngc.test > "${dbdir}/ca.got"
+check "a name becomes DNS.1" grep -qx 'DNS.1 = db-1.ngc.test' "${dbdir}/ca.got"
+check "an IPv4 address becomes IP.1, never DNS" \
+    grep -qx 'IP.1 = 192.168.1.10' <(db_cacnf 192.168.1.10)
+check "an IPv4 address carries no DNS entry" \
+    not grep -q '^DNS' <(db_cacnf 192.168.1.10)
+# One @ names a section. Two would look for a section "node_alt@", and the
+# certificate would have no subjectAltName at all.
+check "subjectAltName names the section with one @" \
+    grep -qx 'subjectAltName = @node_alt' "${dbdir}/ca.got"
+check "the CA may sign, and only it" grep -q 'CA:TRUE,pathlen:0' "${dbdir}/ca.got"
+check "the node certificate may not sign" grep -q 'CA:FALSE' "${dbdir}/ca.got"
+check "the node certificate is for a server and a client" \
+    grep -qx 'extendedKeyUsage = serverAuth,clientAuth' "${dbdir}/ca.got"
+# openssl req reads its options from the section that -section names: without
+# these two lines it asks for the name and then stops.
+check "ca_dn carries the request options" \
+    test "$(sed -n '/^\[ca_dn\]/,/^$/p' "${dbdir}/ca.got" | grep -c '^prompt = no\|^distinguished_name = ')" = 2
+check "node_dn carries the request options" \
+    test "$(sed -n '/^\[node_dn\]/,/^$/p' "${dbdir}/ca.got" | grep -c '^prompt = no\|^distinguished_name = ')" = 2
+check "no @...@ mark is left in the OpenSSL configuration" \
+    not grep -qE '@[A-Z_]+@' "${dbdir}/ca.got"
+
+# ------------------------------------------------- openssl really makes it
+# Not "the file looks right" but the thing it is for: with this configuration
+# openssl has to build a CA and a node certificate that the CA signed and that
+# carries the node's name. That is the same sequence install runs.
+if command -v openssl > /dev/null 2>&1; then
+    o="${dbdir}/ssl"
+    mkdir -p "$o"
+    db_cacnf db-1.ngc.test > "${o}/db-ca.cnf"
+    (
+        cd "$o" || exit 1
+        openssl genpkey -algorithm ed25519 -out ca.key &&
+            openssl req -new -x509 -key ca.key -out ca.crt -days 7300 \
+                -config db-ca.cnf -section ca_dn -extensions ca_ext < /dev/null &&
+            openssl genpkey -algorithm ed25519 -out node.key &&
+            openssl req -new -key node.key -out node.csr -config db-ca.cnf -section node_dn < /dev/null &&
+            openssl x509 -req -in node.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+                -out node.crt -days 3650 -extfile db-ca.cnf -extensions node_ext
+    ) > "${o}/log" 2>&1
+    check "openssl builds the CA and the node certificate with this configuration" test -s "${o}/node.crt"
+    check "the CA signed the node certificate" \
+        openssl verify -CAfile "${o}/ca.crt" "${o}/node.crt"
+    check "the node certificate carries the name of the node" \
+        name_fits "${o}/node.crt" db-1.ngc.test
+    check "and not the name of another node" \
+        name_differs "${o}/node.crt" db-2.ngc.test
+
+    # cert_fits is what makes a second run leave the certificate alone. Until
+    # 4.11.2026 it read the exit code of "openssl x509 -checkhost", and below
+    # OpenSSL 3.5 that code is 0 for a name that does NOT match: on such a
+    # machine a second run kept a certificate made out to ANOTHER node and said
+    # "the certificate of this node fits". Measured on OpenSSL 3.0.2, 3.0.13
+    # and 3.0.22; only 3.5.7 refused it. These two cases are the ones that were
+    # missing - the four lines above check openssl, not cert_fits.
+    db_fits() (
+        db_load
+        NGC_TLS="$1"
+        # shellcheck disable=SC2034
+        NGC_HOSTNAME="$2"
+        cert_fits
+    )
+    check "cert_fits: the node certificate just made fits" \
+        db_fits "$o" db-1.ngc.test
+    check "cert_fits: a certificate for ANOTHER node does not fit" \
+        not db_fits "$o" db-2.ngc.test
+    check "cert_fits: and not for a name nobody signed" \
+        not db_fits "$o" attacker.example.invalid
+    # The key next to it has to be the key of this certificate. A node that
+    # kept a foreign certificate would fail here too - so this case is the one
+    # that must stay sharp on its own, and the name check cannot stand in.
+    cp -- "${o}/node.key" "${o}/node.key.keep"
+    openssl genpkey -algorithm ed25519 -out "${o}/node.key" 2> /dev/null
+    check "cert_fits: a certificate that does not belong to the key does not fit" \
+        not db_fits "$o" db-1.ngc.test
+    cp -- "${o}/node.key.keep" "${o}/node.key"
+    check "cert_fits: and it fits again once the right key is back" \
+        db_fits "$o" db-1.ngc.test
+    # Why cert_covers_name asks only ONE of the two checks: this is the tool
+    # behaviour the choice is there for. -checkip answers "does match" for a
+    # string that is no address at all. If openssl ever stops doing that,
+    # this case goes red and the choice can be looked at again - the reason
+    # stays measured instead of remembered.
+    check "openssl: -checkip with a name that is no address claims a match" \
+        addr_fits "${o}/node.crt" db-2.ngc.test
+else
+    echo "    skipped: openssl is not here, so the certificates were not built"
+fi
+
+# ------------------------------------------------- the answers
+good=0
+while IFS='|' read -r label host nodes boot p1 p2 cadir; do
+    [[ -n "$label" ]] || continue
+    db_answers "$host" "$nodes" "$boot" "$p1" "$p2" "$cadir" ||
+        { good=$((good + 1)); echo "    refused: ${label}"; }
+done <<EOF
+first of three|db-1.ngc.test|${NODE1} ${NODE2} ${NODE3}|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+a joining node|db-2.ngc.test|${NODE1} ${NODE2} ${NODE3}|no|${PASS1}|${PASS2}|/etc/ngc/db-ca
+one node only|db-1.ngc.test|${NODE1}|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+an IPv4 address|192.168.1.10|192.168.1.10:3306 192.168.1.11:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+three nodes on the port MariaDB serves|db-1.ngc.test|db-1.ngc.test:3306 db-2.ngc.test:3306 db-3.ngc.test:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+EOF
+check "ngc-db takes the answers that are in order" test "$good" = 0
+
+bad=0
+while IFS='|' read -r label host nodes boot p1 p2 cadir; do
+    [[ -n "$label" ]] || continue
+    if db_answers "$host" "$nodes" "$boot" "$p1" "$p2" "$cadir"; then
+        bad=$((bad + 1)); echo "    taken: ${label}"
+    fi
+done <<EOF
+no host||${NODE1}|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+host in capitals|DB-1.ngc.test|DB-1.ngc.test:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+host as IPv6|[2001:db8::1]|[2001:db8::1]:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+this node not in the list|db-9.ngc.test|${NODE1} ${NODE2}|no|${PASS1}|${PASS2}|/etc/ngc/db-ca
+no node at all|db-1.ngc.test||yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node without a port|db-1.ngc.test|db-1.ngc.test|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node on port 0|db-1.ngc.test|db-1.ngc.test:0|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node on port 99999|db-1.ngc.test|db-1.ngc.test:99999|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node with a leading zero in the port|db-1.ngc.test|db-1.ngc.test:03306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+the same node twice|db-1.ngc.test|${NODE1} ${NODE1}|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node on the port of the replication|db-1.ngc.test|db-1.ngc.test:4567 db-2.ngc.test:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+node on a port of its own|db-1.ngc.test|db-1.ngc.test:3307 db-2.ngc.test:3306|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+the same host twice on two ports|db-1.ngc.test|db-1.ngc.test:3306 db-1.ngc.test:3307|yes|${PASS1}|${PASS2}|/etc/ngc/db-ca
+bootstrap neither yes nor no|db-1.ngc.test|${NODE1}|maybe|${PASS1}|${PASS2}|/etc/ngc/db-ca
+password too short|db-1.ngc.test|${NODE1}|yes|short|${PASS2}|/etc/ngc/db-ca
+password with a comma|db-1.ngc.test|${NODE1}|yes|Pa55word,ngc|${PASS2}|/etc/ngc/db-ca
+password with a space|db-1.ngc.test|${NODE1}|yes|Pa55word ngc|${PASS2}|/etc/ngc/db-ca
+password with a quote|db-1.ngc.test|${NODE1}|yes|Pa55word'ngc|${PASS2}|/etc/ngc/db-ca
+password with a semicolon|db-1.ngc.test|${NODE1}|yes|Pa55word;ngc|${PASS2}|/etc/ngc/db-ca
+both accounts with the same password|db-1.ngc.test|${NODE1}|yes|${PASS1}|${PASS1}|/etc/ngc/db-ca
+no password for ngc_migrate|db-1.ngc.test|${NODE1}|yes|${PASS1}||/etc/ngc/db-ca
+CA folder not absolute|db-1.ngc.test|${NODE1}|yes|${PASS1}|${PASS2}|etc/ngc/db-ca
+CA folder with ..|db-1.ngc.test|${NODE1}|yes|${PASS1}|${PASS2}|/etc/ngc/../db-ca
+CA folder with a space|db-1.ngc.test|${NODE1}|yes|${PASS1}|${PASS2}|/etc/ngc db-ca
+EOF
+check "ngc-db refuses every answer that is not in order" test "$bad" = 0
+
+# ------------------------------------------- the port of a node has to be real
+# The answer nodes is written <host>:<port>, and the port was accepted and then
+# thrown away: everything after the check strips it. Measured on 18.10.2026 at
+# the unchanged script, three times:
+#   db-1.ngc.test:4567 db-2.ngc.test:3306  -> accepted, and the cluster address
+#                                             became db-1.ngc.test,db-2.ngc.test
+#   db-1.ngc.test:3307 db-2.ngc.test:3306  -> accepted
+#   db-1.ngc.test:3306 db-1.ngc.test:3307  -> accepted, and the cluster address
+#                                             carried the SAME host twice
+# while the same host with the same port WAS refused - so the duplicate check
+# existed and the port walked around it.
+#
+# It may not simply be passed on either: the port inside gcomm:// is Galera's
+# (4567), not MariaDB's (3306). So it is checked here, where nothing has been
+# written yet, and the cluster address stays a list of hosts.
+db_nodes_msg() (
+    db_load
+    NGC_HOSTNAME=db-1.ngc.test NGC_NODES="$1" NGC_BOOTSTRAP=no
+    NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2" NGC_CA_DIR=/etc/ngc/db-ca
+    read_answers 2>&1 | sed 's/\x1b\[[0-9;]*m//g'
+)
+nodes_msg="$(db_nodes_msg 'db-1.ngc.test:4567 db-2.ngc.test:3306')"
+# The preparation has to bite: an empty message would pass every grep -q below
+# that looks for an absence, and three of them do.
+check "a refused port really says something" test -n "$nodes_msg"
+check "the refusal names the port that was written" \
+    grep -q 'names port 4567' <<< "$nodes_msg"
+check "and the port MariaDB answers on, so the admin can fix it" \
+    grep -q '<host>:3306' <<< "$nodes_msg"
+check "and it says the replication port is a different one" \
+    grep -q 'different one (4567)' <<< "$nodes_msg"
+# The intermediate check, so the refusals above are not a wall in front of the
+# line that is meant: the right port goes through to the cluster address.
+check "the right port reaches the cluster address as a plain host list" \
+    test "$(db_cluster db-1.ngc.test:3306 db-2.ngc.test:3306)" = 'db-1.ngc.test,db-2.ngc.test'
+# And no port leaks into gcomm://, which is what passing it on would do.
+check "no port of a node reaches the cluster address" \
+    not grep -q ':' <<< "$(db_cluster db-1.ngc.test:3306 db-2.ngc.test:3306)"
+# The check reads DB_PORT, it does not carry a number of its own: a second
+# number somewhere else is how the Apache line of Punkt 56 drifted apart.
+# The COMPARISON has to ask DB_PORT, not just the message beside it: a literal
+# 3306 in the condition reads the same and drifts the day the port moves. That
+# is the drift of the Apache line in Punkt 56, and a case that greps the whole
+# loop cannot see it - the message names ${DB_PORT} too.
+check "the comparison itself asks DB_PORT, not a number of its own" \
+    grep -qF '[ "${hp##*:}" != "$DB_PORT" ]' "${dbdir}/body.sh"
+
+unset -f db_nodes_msg
+unset nodes_msg
+
+# Nothing a shell would read as a command may pass as a host: it would end up in
+# MariaDB's configuration and in a certificate.
+shell=0
+for h in 'a;id' '$(id)' '`id`' 'a b' 'a|b' 'a>b' "a'b" 'a"b' '*' '-a'; do
+    if db_host "$h"; then shell=$((shell + 1)); echo "    taken: ${h}"; fi
+done
+check "ngc-db refuses hosts with shell characters" test "$shell" = 0
+
+# No password and no key may be put on a command line, where every user of the
+# machine could read it out of the process list.
+# The option itself, not any "-p": "--protocol=socket" holds one and is none.
+check "no password goes on a mariadb command line" \
+    not grep -qE 'mariadb[^#]*(--password|[[:space:]]-p[^[:space:]])' "${dbdir}/body.sh"
+check "the accounts are made from a file, not from -e" \
+    grep -q 'mariadb --protocol=socket < "\$sql"' "${dbdir}/body.sh"
+
+# ------------------------------------------------- the folders MariaDB walks through
+# MariaDB runs as mysql. The keys and certificates in these two folders belong
+# to mysql, so mysql has to get through the folder as well: root:root 0700
+# would make every chown below it worthless, and the server would come up
+# without TLS or stop at the encryption. 0710 is the way through without a
+# listing.
+check "db-tls belongs to root:mysql and is 0710" \
+    grep -qF 'ensure_dir "$NGC_TLS" root:mysql 0710' "${dbdir}/body.sh"
+check "db-keys belongs to root:mysql and is 0710" \
+    grep -qF 'ensure_dir "$NGC_KEYS" root:mysql 0710' "${dbdir}/body.sh"
+# And the other way round: the private key of the CA is the trust of the whole
+# installation, and MariaDB has no business with it.
+check "the folder of the CA stays closed to mysql (root:root 0700)" \
+    grep -qF 'ensure_dir "$NGC_CA_DIR" root:root 0700' "${dbdir}/body.sh"
+check "and it is the only folder left that closed" \
+    test "$(grep -c 'ensure_dir .* root:root 0700' "${dbdir}/body.sh")" = 1
+
+# ------------------------------------------------- a key is never open for a moment
+# Owner and mode are set before the move, inside WORK, which is 0700 and
+# root's. A chmod after the write leaves a window in which the key lies
+# readable where it will stay.
+# Four key files, and a fifth call: hold_secret puts a secret that is already
+# in its place back through put_secret instead of chmod-ing it where it lies.
+# The number is checked and not just allowed to grow, so a sixth call has to be
+# argued for.
+check "the key files go into place through put_secret, and nothing else does" \
+    test "$(grep -c '^	put_secret ' "${dbdir}/body.sh")" = 5
+check "put_secret moves last, after chown and chmod" \
+    test "$(sed -n '/^put_secret() {/,/^}/p' "${dbdir}/body.sh" | grep -cE '^	(chown|chmod).*"\$from"')" = 2
+check "no key file is chmod-ed after it lies in its place" \
+    not grep -qE 'chmod 0400 "\$\{NGC_(KEYS|TLS)\}' "${dbdir}/body.sh"
+
+# ------------------------------------------------- uninstall: warn first, then delete
+# A warning after the deletion is a log entry, not a warning.
+warn_line="$(grep -n 'cannot be read any more - not by this server' "${dbdir}/body.sh" | head -n1 | cut -d: -f1)"
+rm_line="$(grep -n 'rm -rf "\$NGC_TLS"' "${dbdir}/body.sh" | head -n1 | cut -d: -f1)"
+check "uninstall warns about the data BEFORE it removes the keys" \
+    test -n "$warn_line" -a -n "$rm_line" -a "${warn_line:-0}" -lt "${rm_line:-0}"
+# uninstall does not run read_answers, so it checks the one path it deletes.
+chk_line="$(sed -n '/^uninstall_ngc_db() {/,/^}/p' "${dbdir}/body.sh" | grep -n 'valid_dir "\$NGC_CA_DIR"' | head -n1 | cut -d: -f1)"
+# The command, not the comment above it: "An rm -rf on a path nobody looked
+# at" stands two lines earlier and matched first, which made this check red for
+# the wrong reason.
+del_line="$(sed -n '/^uninstall_ngc_db() {/,/^}/p' "${dbdir}/body.sh" | grep -nE '^	+rm -rf ' | head -n1 | cut -d: -f1)"
+check "uninstall checks the folder of the CA before it removes it" \
+    test -n "$chk_line" -a -n "$del_line" -a "${chk_line:-0}" -lt "${del_line:-0}"
+# The question the human answers has to name the consequence, in every language.
+purge_q="$("$YQ" -r '.scripts."ngc-db".actions[] | select(.name == "uninstall") | .prompts[0]
+    | [.question, .questionDE, .questionES, .questionIT, .questionFR] | .[]' "${ULH}/apps/cli-ulh/assets/catalog.yaml")"
+check "the purge question names the data in all five languages" \
+    test "$(grep -cE 'read any more|nicht mehr lesbar|no se podr|non saranno|plus lisibles' <<< "$purge_q")" = 5
+
+# ------------------------------------------------- every action says what it needs
+check "root is checked for install/configure, sign, uninstall, backup and restore" \
+    test "$(grep -c '^	need_root$' "${dbdir}/body.sh")" = 5
+check "the distribution is checked for the same five" \
+    test "$(grep -c '^	need_debian$' "${dbdir}/body.sh")" = 5
+
+# ================================================================= backup and restore
+# These run the two actions for real, with four stubs in their place: the
+# server (mariadb, mariadb-dump), the two checks that need a real machine
+# (need_root, need_debian) and the question for the passphrase, which needs a
+# terminal. Everything that carries the weight is the script's own: the dump
+# goes through openssl with the real cipher and the real number of rounds, the
+# checksum is a real sha256sum, and what reaches the server is the text the
+# script built. So a wrong passphrase, a damaged file and a missing yes are
+# measured, not assumed.
+#
+# db_stub defines the stubs AFTER db_load, so they win over the script's own
+# functions of the same name.
+db_stub() {
+    need_root() { :; }
+    need_debian() { :; }
+    mariadb_running() { return 0; }
+    sleep() { :; }
+    # The real one reads the terminal without echo; there is none here. That
+    # ask_passphrase reads without echo is checked separately, further down.
+    ask_passphrase() {
+        BACKUP_PASS_FILE="${WORK}/pass.txt"
+        ( umask 077; printf '%s' "$DBPASS" > "$BACKUP_PASS_FILE" )
+    }
+    mariadb-dump() { cat "${dbdir}/fake-dump.sql"; }
+    # restore talks to the server more than once now: it loads, then asks
+    # which tables came out, then moves the names. So the stub writes every
+    # call and everything it was fed into one transcript, and answers the one
+    # question that has an answer - which tables a database holds. The two
+    # table lists are files, so a case can say what the server found.
+    mariadb() {
+        printf '>> mariadb %s\n' "$*" >> "${dbdir}/transcript.txt"
+        case "$*" in
+        *information_schema*)
+            case "$*" in
+            *"TABLE_SCHEMA = 'ngc'"*) cat "${dbdir}/tables-ngc.txt" ;;
+            *) cat "${dbdir}/tables-fresh.txt" ;;
+            esac
+            ;;
+        *-e*) : ;;
+        *) cat >> "${dbdir}/transcript.txt" ;;
+        esac
+    }
+}
+
+# A dump as mariadb-dump writes one: its own first line, a row with a byte
+# that only --hex-blob survives, and its own last line.
+cat > "${dbdir}/fake-dump.sql" <<'EOF'
+-- MariaDB dump 10.19  Distrib 10.11.6-MariaDB, for debian-linux-gnu
+--
+-- Host: localhost    Database: ngc
+DROP TABLE IF EXISTS `ngc_blob`;
+CREATE TABLE `ngc_blob` (`id` varbinary(64) NOT NULL, `data` longblob) ENGINE=InnoDB;
+INSERT INTO `ngc_blob` VALUES ('1',0x7365637265742d6d61726b6572);
+-- Dump completed on 2026-10-10 12:00:00
+EOF
+# The same dump with its last line cut off: a dump that stopped in the middle.
+grep -v '^-- Dump completed' "${dbdir}/fake-dump.sql" > "${dbdir}/short-dump.sql"
+
+# What the server reports after the load, and what it already had. The second
+# one matters: restore has to move those aside, not delete them.
+printf 'ngc_blob\nngc_user\n' > "${dbdir}/tables-fresh.txt"
+printf 'ngc_user\n' > "${dbdir}/tables-ngc.txt"
+
+GOODPASS="correct horse battery staple"
+BADPASS="not the passphrase at all"
+
+db_backup() (
+    db_load
+    db_stub
+    DBPASS="$1"
+    NGC_BACKUP_DIR="$2"
+    backup_ngc_db
+)
+db_restore() (
+    db_load
+    db_stub
+    DBPASS="$1"
+    NGC_BACKUP_FILE="$2"
+    NGC_RESTORE_CONFIRM="$3"
+    restore_ngc_db
+)
+
+store="${dbdir}/store"
+mkdir -p "$store"
+db_backup "$GOODPASS" "$store" > "${dbdir}/backup.log" 2>&1
+backup_code=$?
+check "backup runs through and ends with code 0" test "$backup_code" = 0
+enc="$(ls "$store"/ngc-*.sql.enc 2>/dev/null | head -n1)"
+check "backup leaves the file and its checksum and nothing else" \
+    test "$(ls "$store" | wc -l)" = 2
+check "the backup file is there" test -n "$enc" -a -s "${enc:-/nonexistent}"
+check "its checksum lies beside it" test -s "${enc:-/nonexistent}.sha256"
+check "the checksum fits the file" \
+    bash -c 'cd "$1" && sha256sum -c --status "$(basename "$2").sha256"' _ "$store" "$enc"
+# The whole point of encrypting it: the bytes of the database are not in there.
+check "the backup carries no readable dump" \
+    not grep -qa 'MariaDB dump' "${enc:-/nonexistent}"
+check "the backup carries no readable row" \
+    not grep -qa 'ngc_blob' "${enc:-/nonexistent}"
+check "openssl can open it again with the passphrase, byte for byte" \
+    bash -c 'openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -in "$1" \
+        -pass "pass:$2" 2>/dev/null | cmp -s - "$3"' _ "$enc" "$GOODPASS" "${dbdir}/fake-dump.sql"
+check "and not with another one" \
+    not bash -c 'openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -in "$1" \
+        -pass "pass:$2" 2>/dev/null | cmp -s - "$3"' _ "$enc" "$BADPASS" "${dbdir}/fake-dump.sql"
+check "the readable dump is gone from the working folder" \
+    not test -e "${dbdir}/work/ngc.sql"
+check "and so is the passphrase file" not test -e "${dbdir}/work/pass.txt"
+# The sentence a human has to read before they put the file away.
+check "backup says that without the passphrase nobody opens the file again" \
+    grep -q 'nobody opens this file again' "${dbdir}/backup.log"
+# It writes one more file every time and removes none. Nothing in ulh cleans
+# that folder up, so the human has to be told - a script that may be the last
+# thing still working does not delete backups.
+check "backup says where the files lie and that nobody tidies them" \
+    bash -c 'grep -q "removes none" "$1" && grep -q "${2}" "$1"' _ "${dbdir}/backup.log" "$store"
+
+# A dump without its end mark is not a backup. Measured on the folder: nothing
+# may be left there.
+empty="${dbdir}/empty-store"
+mkdir -p "$empty"
+cp "${dbdir}/fake-dump.sql" "${dbdir}/keep-dump.sql"
+cp "${dbdir}/short-dump.sql" "${dbdir}/fake-dump.sql"
+db_backup "$GOODPASS" "$empty" > "${dbdir}/backup-short.log" 2>&1
+check "backup refuses a dump that has no end mark" test "$?" != 0
+check "and leaves nothing behind in the folder" test "$(ls "$empty" | wc -l)" = 0
+check "it says the server was busy or the dump stopped" \
+    grep -q 'the dump carries no end mark' "${dbdir}/backup-short.log"
+cp "${dbdir}/keep-dump.sql" "${dbdir}/fake-dump.sql"
+
+# A folder nobody may back up into. Each of these three EXISTS, so only the
+# grammar can refuse it: with a folder that is simply not there, "test -d"
+# refuses them all, and the check for the grammar would be green with the
+# grammar taken out - measured, it was.
+mkdir -p "${dbdir}/with space"
+check "backup refuses a folder that is not absolute" \
+    not db_backup "$GOODPASS" "."
+check "backup refuses a folder with .., even one that is there" \
+    not db_backup "$GOODPASS" "${store}/../store"
+check "backup refuses a folder with a space in its name" \
+    not db_backup "$GOODPASS" "${dbdir}/with space"
+check "backup refuses a folder that is not there" \
+    not db_backup "$GOODPASS" "/var/backups/ngc-does-not-exist"
+
+# ----------------------------------------------------- restore
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "$enc" yes > "${dbdir}/restore.log" 2>&1
+restore_code=$?
+check "restore runs through and ends with code 0" test "$restore_code" = 0
+# The whole point of the safer form: ngc itself is NEVER dropped. Between a
+# DROP DATABASE ngc and the last statement of the dump, ngc would be neither
+# the old state nor the new one, and nothing would bring the old one back.
+# The backticks are in the pattern on purpose: the empty database of the load
+# IS dropped, and that one is called ngc_restore_<stamp>.
+# Both spellings, quoted and not: the first version of this check looked for
+# the backticks only, and the form it is here to catch writes
+# "DROP DATABASE IF EXISTS ngc;" without them - so it was green against the
+# very thing it guards. The pattern ends at the semicolon, so the empty
+# database of the load (ngc_restore_<stamp>, which IS dropped) does not match.
+check "restore never drops the database ngc" \
+    not grep -qiE 'DROP DATABASE( IF EXISTS)? `?ngc`? *;' "${dbdir}/transcript.txt"
+check "the dump goes into a database of its own first" \
+    grep -qE 'CREATE DATABASE `ngc_restore_[0-9]{14}` CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;' "${dbdir}/transcript.txt"
+check "and the whole dump really arrives there" \
+    grep -q '0x7365637265742d6d61726b6572' "${dbdir}/transcript.txt"
+# "The database is called ngc afterwards" would also be green if nothing had
+# been loaded. So: the tables the server reported are the tables that are
+# moved onto the name, each one of them.
+check "every table of the backup is moved onto the name ngc" \
+    test "$(grep -oE '`ngc_restore_[0-9]{14}`\.`[a-z_]+` TO `ngc`\.`[a-z_]+`' \
+        "${dbdir}/transcript.txt" | wc -l)" = 2
+check "the blob table is one of them" \
+    grep -qE '`ngc_restore_[0-9]{14}`\.`ngc_blob` TO `ngc`\.`ngc_blob`' "${dbdir}/transcript.txt"
+check "restore counted the tables and said how many" \
+    grep -q '2 tables came out of the backup' "${dbdir}/restore.log"
+# What was in ngc is moved aside, not deleted, and the old table that is NOT
+# in the backup has to be among the moved ones.
+check "what was in ngc is moved aside into a database of its own" \
+    grep -qE 'CREATE DATABASE `ngc_before_[0-9]{14}`' "${dbdir}/transcript.txt"
+check "the table that was there is moved aside, not dropped" \
+    grep -qE '`ngc`\.`ngc_user` TO `ngc_before_[0-9]{14}`\.`ngc_user`' "${dbdir}/transcript.txt"
+check "and the kept database is never dropped by the script" \
+    not grep -qE 'DROP DATABASE IF EXISTS `ngc_before_' "${dbdir}/transcript.txt"
+check "the empty database of the load is cleaned up" \
+    grep -qE 'DROP DATABASE IF EXISTS `ngc_restore_[0-9]{14}`;' "${dbdir}/transcript.txt"
+check "restore says where the old data are now" \
+    grep -qE 'is in ngc_before_[0-9]{14}, untouched' "${dbdir}/restore.log"
+check "and names the one command that removes them, by hand" \
+    grep -qE 'DROP DATABASE .*ngc_before_[0-9]{14}' "${dbdir}/restore.log"
+check "restore says that the schema still has to be brought up" \
+    grep -q 'ngc-api migrate' "${dbdir}/restore.log"
+check "restore leaves no readable dump behind" not test -e "${dbdir}/work/ngc.sql"
+check "and no passphrase file" not test -e "${dbdir}/work/pass.txt"
+# The warning has to say that this is not a local matter.
+check "the warning says that every node of the cluster is hit" \
+    grep -q 'DOES NOT STOP AT THIS SERVER' "${dbdir}/restore.log"
+check "and that the installation needs room for both states" \
+    grep -q 'needs room for both' "${dbdir}/restore.log"
+
+# A load that produced no table at all: that is not a backup, and ngc may not
+# be touched. "test -d" of a database does not exist, so this is the case that
+# tells "the name is there" from "the data are there".
+printf '' > "${dbdir}/tables-fresh.txt"
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "$enc" yes > "${dbdir}/restore-notables.log" 2>&1
+check "restore refuses a backup that loaded without a table" test "$?" != 0
+check "and moves no name at all" \
+    not grep -q 'RENAME TABLE' "${dbdir}/transcript.txt"
+check "it says ngc was not touched" \
+    grep -q 'was NOT touched' "${dbdir}/restore-notables.log"
+check "and it removes its own half-loaded database" \
+    grep -qE 'DROP DATABASE IF EXISTS `ngc_restore_[0-9]{14}`;' "${dbdir}/transcript.txt"
+
+# A table name out of the backup that would end the quoting of the RENAME
+# statement. The names come from the file, so they come from outside.
+printf 'ngc_blob\nbad`name\n' > "${dbdir}/tables-fresh.txt"
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "$enc" yes > "${dbdir}/restore-badtable.log" 2>&1
+check "restore refuses a table name it would have to quote" test "$?" != 0
+check "and moves no name then either" \
+    not grep -q 'RENAME TABLE' "${dbdir}/transcript.txt"
+printf 'ngc_blob\nngc_user\n' > "${dbdir}/tables-fresh.txt"
+
+# A dump that names a database of its own would step out of the one this
+# script chose and write wherever it likes.
+for bad_line in 'CREATE DATABASE `other`;' 'USE other;' \
+    'CREATE ALGORITHM=UNDEFINED DEFINER=`root`@`localhost` SQL SECURITY DEFINER VIEW `v` AS SELECT 1;'; do
+    bad_dir="${dbdir}/bad-$(printf '%s' "$bad_line" | cksum | cut -d' ' -f1)"
+    mkdir -p "$bad_dir"
+    { head -n 3 "${dbdir}/fake-dump.sql"; printf '%s\n' "$bad_line"
+      tail -n 4 "${dbdir}/fake-dump.sql"; } > "${dbdir}/bad-dump.sql"
+    openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -salt \
+        -in "${dbdir}/bad-dump.sql" -out "${bad_dir}/ngc-bad.sql.enc" \
+        -pass "pass:${GOODPASS}" 2>/dev/null
+    ( cd "$bad_dir" && sha256sum ngc-bad.sql.enc > ngc-bad.sql.enc.sha256 )
+    rm -f "${dbdir}/transcript.txt"
+    db_restore "$GOODPASS" "${bad_dir}/ngc-bad.sql.enc" yes > /dev/null 2>&1
+    check "restore refuses a dump that carries: ${bad_line}" test "$?" != 0
+    check "  and does not even start to load it" not test -e "${dbdir}/transcript.txt"
+done
+
+# Without the yes nothing happens at all - and "nothing" is measured on the
+# server side, not on the exit code.
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "$enc" no > "${dbdir}/restore-no.log" 2>&1
+check "restore without the yes stops" test "$?" != 0
+check "and nothing reached the server" not test -e "${dbdir}/transcript.txt"
+check "it warned about the data before it asked" \
+    grep -q 'DOES NOT STOP AT THIS SERVER' "${dbdir}/restore-no.log"
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "$enc" maybe > /dev/null 2>&1
+check "an answer that is neither yes nor no counts as no" not test -e "${dbdir}/transcript.txt"
+
+# A wrong passphrase, a missing checksum, a changed byte: each one stops before
+# the database is touched.
+rm -f "${dbdir}/transcript.txt"
+db_restore "$BADPASS" "$enc" yes > "${dbdir}/restore-badpass.log" 2>&1
+check "restore refuses a wrong passphrase" test "$?" != 0
+check "and touches nothing" not test -e "${dbdir}/transcript.txt"
+
+cp "$enc" "${dbdir}/lonely.sql.enc"
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "${dbdir}/lonely.sql.enc" yes > "${dbdir}/restore-nosum.log" 2>&1
+check "restore refuses a backup without its checksum" test "$?" != 0
+check "and touches nothing then either" not test -e "${dbdir}/transcript.txt"
+
+broken="${dbdir}/broken"
+mkdir -p "$broken"
+cp "$enc" "${broken}/ngc-broken.sql.enc"
+( cd "$broken" && sha256sum ngc-broken.sql.enc > ngc-broken.sql.enc.sha256 )
+# One byte in the middle, far behind the salt: the checksum has to catch it.
+printf 'X' | dd of="${broken}/ngc-broken.sql.enc" bs=1 seek=40 conv=notrunc status=none
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "${broken}/ngc-broken.sql.enc" yes > "${dbdir}/restore-broken.log" 2>&1
+check "restore refuses a file whose checksum does not fit" test "$?" != 0
+check "and says so before it asks for the passphrase" \
+    grep -q 'checksum does not fit' "${dbdir}/restore-broken.log"
+check "and touches nothing" not test -e "${dbdir}/transcript.txt"
+
+# Something that decrypts cleanly and is not a dump of ngc. A passphrase that
+# is right says nothing about what is inside.
+other="${dbdir}/other"
+mkdir -p "$other"
+printf 'this is not a dump\n' > "${dbdir}/notadump.txt"
+openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -salt \
+    -in "${dbdir}/notadump.txt" -out "${other}/ngc-other.sql.enc" -pass "pass:${GOODPASS}" 2>/dev/null
+( cd "$other" && sha256sum ngc-other.sql.enc > ngc-other.sql.enc.sha256 )
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "${other}/ngc-other.sql.enc" yes > "${dbdir}/restore-other.log" 2>&1
+check "restore refuses a file that is not a dump of MariaDB" test "$?" != 0
+check "and touches nothing" not test -e "${dbdir}/transcript.txt"
+
+# A dump that stopped in the middle, encrypted and with a fitting checksum:
+# only the end mark catches this one.
+cut="${dbdir}/cut"
+mkdir -p "$cut"
+openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -md sha256 -salt \
+    -in "${dbdir}/short-dump.sql" -out "${cut}/ngc-cut.sql.enc" -pass "pass:${GOODPASS}" 2>/dev/null
+( cd "$cut" && sha256sum ngc-cut.sql.enc > ngc-cut.sql.enc.sha256 )
+rm -f "${dbdir}/transcript.txt"
+db_restore "$GOODPASS" "${cut}/ngc-cut.sql.enc" yes > "${dbdir}/restore-cut.log" 2>&1
+check "restore refuses a dump without its end mark" test "$?" != 0
+check "and touches nothing" not test -e "${dbdir}/transcript.txt"
+
+# Again: files that are really there, checksum and all, so only the grammar
+# can refuse them.
+spaced="${dbdir}/with space"
+cp "$enc" "${enc}.sha256" "$spaced/" 2>/dev/null
+check "restore refuses a path with .., even one that leads to the file" \
+    not db_restore "$GOODPASS" "${store}/../store/$(basename "${enc:-x}")" yes
+check "restore refuses a path with a space in it" \
+    not db_restore "$GOODPASS" "${spaced}/$(basename "${enc:-x}")" yes
+
+# ----------------------------------------------------- the secrets, read against the code
+# The warning has to stand BEFORE the line that loads the dump; after it, it is
+# a log entry and no warning. Same shape as the check for uninstall above.
+# Counted inside restore_ngc_db, not over the whole body: ensure_database holds
+# the very same "mariadb --protocol=socket < " line, it stands further up, and
+# grep over the whole body took that one - which made this check red for a
+# reason that had nothing to do with restore.
+sed -n '/^restore_ngc_db() {/,/^}/p' "${dbdir}/body.sh" > "${dbdir}/restore.part"
+r_warn="$(grep -n 'The database ngc will be replaced by this backup' "${dbdir}/restore.part" | head -n1 | cut -d: -f1)"
+r_load="$(grep -n 'mariadb --protocol=socket < "\$sql"' "${dbdir}/restore.part" | head -n1 | cut -d: -f1)"
+r_tables="$(grep -n 'list_tables "\$fresh"' "${dbdir}/restore.part" | head -n1 | cut -d: -f1)"
+check "restore warns about the data BEFORE it loads the dump" \
+    test -n "$r_warn" -a -n "$r_load" -a "${r_warn:-0}" -lt "${r_load:-0}"
+r_conf="$(grep -n 'NGC_RESTORE_CONFIRM' "${dbdir}/restore.part" | tail -n1 | cut -d: -f1)"
+check "and it asks for the yes before that line too" \
+    test -n "$r_conf" -a -n "$r_load" -a "${r_conf:-0}" -lt "${r_load:-0}"
+# And the table count stands between the load and the rename, not after it:
+# counted afterwards it would be a report, not a condition.
+# The command, not the comment that explains it: the comment above the code
+# says "RENAME TABLE" too, it stands further up, and a plain grep took that
+# one - the same trap the check for uninstall above already fell into once.
+r_ren="$(grep -nF "printf 'RENAME TABLE'" "${dbdir}/restore.part" | head -n1 | cut -d: -f1)"
+check "restore counts the tables after the load and before the rename" \
+    test -n "$r_tables" -a -n "$r_ren" -a "${r_load:-0}" -lt "${r_tables:-0}" \
+        -a "${r_tables:-0}" -lt "${r_ren:-0}"
+
+# No secret on a command line. "-pass pass:" would put the passphrase in the
+# process list of the machine, where every user can read it; "-pass file:" puts
+# the path of a 0600 file there.
+check "the passphrase goes to openssl as a file, never as pass:" \
+    not grep -q 'pass "pass:' "${dbdir}/body.sh"
+check "both calls of openssl enc read it out of the file" \
+    test "$(grep -c 'pass "file:\${BACKUP_PASS_FILE}"' "${dbdir}/body.sh")" = 2
+check "the passphrase is read without echo" \
+    grep -q 'read -rs first' "${dbdir}/body.sh"
+check "its file is written under umask 077, not chmod-ed afterwards" \
+    test "$(sed -n '/^ask_passphrase() {/,/^}/p' "${dbdir}/body.sh" | grep -c 'umask 077')" = 1
+check "no chmod ever touches the passphrase file" \
+    not grep -q 'chmod.*BACKUP_PASS_FILE' "${dbdir}/body.sh"
+# The server is reached over the socket as root, so there is no database
+# password in this script at all - the existing check above forbids one on a
+# command line, this one forbids the option anywhere.
+check "mariadb-dump is called over the socket" \
+    grep -q 'mariadb-dump --protocol=socket' "${dbdir}/body.sh"
+check "--hex-blob is there: every blob column of NGC is binary" \
+    grep -q -- '--hex-blob' "${dbdir}/body.sh"
+check "no routine and no event is dumped, so none can run on restore" \
+    test "$(grep -c -- '--routines=FALSE --events=FALSE' "${dbdir}/body.sh")" = 1
+
+# The passphrase must not be an answer: an answer travels through the
+# environment and through config/answer.yaml.
+back_vars="$("$YQ" -r '.scripts."ngc-db".actions[] | select(.name == "backup") | .prompts[].variable' \
+    "${ULH}/apps/cli-ulh/assets/catalog.yaml")"
+check "backup asks for the folder and for nothing else" test "$back_vars" = NGC_BACKUP_DIR
+rest_vars="$("$YQ" -r '.scripts."ngc-db".actions[] | select(.name == "restore") | .prompts[].variable' \
+    "${ULH}/apps/cli-ulh/assets/catalog.yaml")"
+check "restore asks for the file and for the yes, and for nothing else" \
+    test "$rest_vars" = "NGC_BACKUP_FILE
+NGC_RESTORE_CONFIRM"
+# Whole names, anchored: NGC_PASSWORD_NGC of install is an answer and has to
+# stay one. What may never become an answer is the passphrase of a backup.
+check "no answer of ngc-db carries the passphrase of a backup" \
+    not grep -qixE 'NGC_BACKUP_(PASS|PASSPHRASE|PASSWORD)|NGC_PASSPHRASE' \
+        <("$YQ" -r '.scripts."ngc-db".actions[].prompts[].variable' "${ULH}/apps/cli-ulh/assets/catalog.yaml")
+# The yes is a yes/no question, so ulh asks it in the admin's language and
+# hands the script "yes" or "no" whatever was typed.
+check "the confirmation is a yes/no question with the default no" \
+    test "$("$YQ" -r '.scripts."ngc-db".actions[] | select(.name == "restore")
+        | .prompts[1] | .type + " " + .default' "${ULH}/apps/cli-ulh/assets/catalog.yaml")" = "yes/no no"
+# And it has to name what is lost, in every language - as the purge question does.
+restore_q="$("$YQ" -r '.scripts."ngc-db".actions[] | select(.name == "restore") | .prompts[1]
+    | [.question, .questionDE, .questionES, .questionIT, .questionFR] | .[]' "${ULH}/apps/cli-ulh/assets/catalog.yaml")"
+check "the restore question names the loss in all five languages" \
+    test "$(grep -cE 'gone for good|unwiderruflich weg|se perder|perduti per sempre|perdues' <<< "$restore_q")" = 5
+
+unset -f db_stub db_backup db_restore
+unset GOODPASS BADPASS store enc empty broken other cut backup_code restore_code
+unset r_warn r_load r_conf r_tables r_ren back_vars rest_vars restore_q spaced
+unset bad_line bad_dir
+
+# --------------------------------------- does a written configuration reach it
+# CHANGED is what tells start_cluster that MariaDB has to pick the new
+# configuration up. put_file sets it - and on the right of a pipe put_file runs
+# in a subshell, where that assignment dies with the subshell. The tick
+# "written: ..." is printed either way, so the loss is invisible: measured on
+# Debian 13 on 17.10.2026 with a probe inside start_cluster,
+# "action=nothing bootstrap=1 changed=0 running=yes" right after that tick.
+chgdir="${dbdir}/changed"
+mkdir -p "$chgdir"
+db_changed() (
+    db_load
+    CONF_FILE="${chgdir}/60-ngc.cnf"
+    NGC_HOSTNAME=db-1.ngc.test
+    NGC_NODES="${NODE1} ${NODE2} ${NODE3}"
+    NGC_BOOTSTRAP=no NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2"
+    NGC_CA_DIR=/etc/ngc/db-ca
+    read_answers > /dev/null 2>&1 || exit 1
+    SST_PASS="0123456789abcdef"
+    load_sst_password() { :; }
+    ensure_dir() { :; }
+    CHANGED=0
+    printf '%s
+' "$1" > "$CONF_FILE"
+    write_config > /dev/null 2>&1
+    printf '%s' "$CHANGED"
+)
+# The preparation has to work before an answer counts: a first file that really
+# differs, so there is something to notice.
+check "a configuration that differs is noticed, so start_cluster is told"     test "$(db_changed 'this is not the configuration')" = 1
+# And the other way: nothing written, nothing to apply. The file is the one
+# write_config itself produced the line before, so this is not a second shape.
+db_same() (
+    db_load
+    CONF_FILE="${chgdir}/60-ngc.cnf"
+    NGC_HOSTNAME=db-1.ngc.test
+    NGC_NODES="${NODE1} ${NODE2} ${NODE3}"
+    NGC_BOOTSTRAP=no NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2"
+    NGC_CA_DIR=/etc/ngc/db-ca
+    read_answers > /dev/null 2>&1 || exit 1
+    SST_PASS="0123456789abcdef"
+    load_sst_password() { :; }
+    ensure_dir() { :; }
+    write_config > /dev/null 2>&1   # first write: makes the file
+    CHANGED=0
+    write_config > /dev/null 2>&1   # second write: the same content
+    printf '%s' "$CHANGED"
+)
+check "a configuration that is already right changes nothing"     test "$(db_same)" = 0
+# And the cause, named: put_file may not sit on the right of a pipe.
+check "write_config does not put put_file behind a pipe"     not grep -qE '[|][[:space:]]*put_file'         <(awk '/^write_config\(\) \{/,/^\}/' "${dbdir}/body.sh")
+
+unset -f db_changed db_same
+unset chgdir
+unset whydir why_port why_unknown
+unset nodes_msg
+
+# ------------------------------------ what the script says when it did not start
+# The message used to be one fixed sentence, "MariaDB did not come up. Is the
+# first node running?" - and it named the wrong cause: measured on 17.10.2026,
+# the first node WAS running and the port was taken by it, in another WSL
+# instance of the same network namespace. A sentence that names one of several
+# possible causes and rules out none is the same class of finding as the one
+# sentence of ngc-controller in Punkt 61.
+#
+# The journals below are not invented: every line is verbatim off this
+# machine's own mariadb journal, collected while measuring ngc-db on 17. and
+# 18.10.2026. unit_journal is the only thing stubbed - why_it_did_not_start
+# itself is the one out of the script.
+whydir="${dbdir}/why"
+mkdir -p "$whydir"
+db_why() (
+    db_load
+    NGC_HOSTNAME=db-1.ngc.test
+    NGC_KEYS=/etc/ngc/db-keys
+    CONF_FILE=/etc/mysql/mariadb.conf.d/60-ngc.cnf
+    DB_PORT=3306
+    GALERA_PORT=4567
+    HOSTS=(db-1.ngc.test db-2.ngc.test)
+    local recorded="$1"
+    unit_journal() { cat "$recorded"; }
+    why_it_did_not_start 0
+)
+# Each file holds the lines of ONE real failure, in the order they appeared.
+cat > "${whydir}/port" <<'J'
+2026-10-17 23:36:30 0 [ERROR] Can't start server: Bind on TCP/IP port. Got error: 98: Address already in use
+2026-10-17 23:36:30 0 [ERROR] Do you already have another server running on port: 3306 ?
+2026-10-17 23:36:30 0 [ERROR] Aborting
+J
+cat > "${whydir}/ownname" <<'J'
+2026-10-17 23:34:28 0 [ERROR] Can't create IP socket: Name or service not known
+2026-10-17 23:34:28 0 [ERROR] Aborting
+J
+cat > "${whydir}/nodename" <<'J'
+2026-10-17 22:15:10 0 [ERROR] WSREP: getaddrinfo() failed on 'db-1.ngc.test': -2 (Name or service not known)
+2026-10-17 22:15:10 0 [ERROR] WSREP: failed to open gcomm backend connection: 110: failed to reach primary view
+2026-10-17 22:15:10 0 [ERROR] Aborting
+J
+cat > "${whydir}/keys" <<'J'
+2026-10-17 21:15:34 0 [ERROR] mariadbd: Cannot decrypt /etc/ngc/db-keys/keys.enc. Wrong key?
+2026-10-17 21:15:34 0 [ERROR] Plugin 'file_key_management' init function returned error.
+2026-10-17 21:15:34 0 [ERROR] InnoDB: cannot enable encryption, encryption plugin is not available
+2026-10-17 21:15:34 0 [ERROR] Aborting
+J
+cat > "${whydir}/olddata" <<'J'
+2026-10-17 22:15:10 0 [ERROR] InnoDB: Obtaining redo log encryption key version 1 failed (4294967295). Maybe the key or the required encryption key management plugin was not found.
+2026-10-17 22:15:10 0 [ERROR] InnoDB: Reading log encryption info failed; the log was created with MariaDB 11.8.6.
+2026-10-17 22:15:10 0 [ERROR] Unknown/unsupported storage engine: InnoDB
+2026-10-17 22:15:10 0 [ERROR] Aborting
+J
+cat > "${whydir}/provider" <<'J'
+2026-10-17 21:26:23 0 [ERROR] WSREP: Error setting SSL cipher list to 'TLS_AES_256_GCM_SHA384': 167772345: 'error:0A0000B9:SSL routines::no cipher match'
+2026-10-17 21:26:23 0 [ERROR] WSREP: Failed to create a new provider '/usr/lib/galera/libgalera_smm.so' with options 'socket.ssl_ca=/etc/ngc/db-tls/ca.crt': Failed to initialize wsrep provider
+2026-10-17 21:26:23 0 [ERROR] WSREP: Failed to load provider
+2026-10-17 21:26:23 0 [ERROR] Aborting
+J
+cat > "${whydir}/noquorum" <<'J'
+2026-10-17 23:45:34 0 [ERROR] WSREP: failed to open gcomm backend connection: 110: failed to reach primary view
+2026-10-17 23:45:35 0 [ERROR] WSREP: gcs connect failed: Operation timed out
+2026-10-17 23:45:35 0 [ERROR] WSREP: wsrep::connect(gcomm://db-1.ngc.test) failed: 7
+2026-10-17 23:45:35 0 [ERROR] Aborting
+J
+cat > "${whydir}/unknown" <<'J'
+2026-10-18 00:00:00 0 [ERROR] something nobody here has ever seen
+J
+# The preparation has to bite before any answer counts: an empty journal would
+# make every one of these look like the last case.
+check "the measurement really hands the recorded journal over" \
+    grep -q 'port 3306' <<< "$(db_why "${whydir}/port")"
+# 1. the one that was reported wrong
+why_port="$(db_why "${whydir}/port")"
+check "a taken port is named as a taken port" \
+    grep -q 'already holds port 3306' <<< "$why_port"
+check "and it does NOT blame the other nodes any more" \
+    not grep -qiE 'first node|other node of the installation answered' <<< "$why_port"
+# 2. this node's own name
+check "an unresolvable own name is named, with the name" \
+    grep -q 'db-1.ngc.test, does not resolve' <<< "$(db_why "${whydir}/ownname")"
+# 3. a name of the node list
+check "an unresolvable node of the list is named, with the list" \
+    grep -q 'db-1.ngc.test db-2.ngc.test' <<< "$(db_why "${whydir}/nodename")"
+# and that one matters: its journal ALSO carries the timeout line, so the order
+# of the questions is what keeps it from being read as a missing node.
+check "a name that does not resolve beats the timeout in the same journal" \
+    not grep -q 'answered on port' <<< "$(db_why "${whydir}/nodename")"
+# 4. the key pair
+check "a key file that cannot be opened is named, with its folder" \
+    grep -q '/etc/ngc/db-keys/keys.enc' <<< "$(db_why "${whydir}/keys")"
+# 5. data written with another key
+check "data written with another key is told apart from a missing key" \
+    grep -q 'written with another encryption key' <<< "$(db_why "${whydir}/olddata")"
+# 6. the provider
+check "a refused provider setting points at the configuration file" \
+    grep -q '60-ngc.cnf' <<< "$(db_why "${whydir}/provider")"
+check "and it says nothing was reached over the network" \
+    grep -q 'Nothing was reached over the network' <<< "$(db_why "${whydir}/provider")"
+# 7. and only here is the cluster the answer
+check "a real timeout does name the nodes and the Galera port" \
+    grep -q 'answered on port 4567' <<< "$(db_why "${whydir}/noquorum")"
+# 8. and nothing is ever answered with silence
+why_unknown="$(db_why "${whydir}/unknown")"
+check "an unknown journal says so and points at journalctl" \
+    grep -q 'journalctl -u mariadb' <<< "$why_unknown"
+check "and it does not invent a cause" \
+    not grep -qiE 'port|resolve|key|provider' <<< "$why_unknown"
+# No journal line may be printed back: a line carries whatever MariaDB put in
+# it, and these sentences end up in reports.
+check "no journal line is echoed into the message" \
+    not grep -qE '\[ERROR\]' <<< "$why_port$(db_why "${whydir}/keys")$(db_why "${whydir}/provider")"
+# And every failing branch of start_cluster has to ask, not just one of them.
+check "all three failures of start_cluster say what was found" \
+    test "$(awk '/^start_cluster\(\) \{/,/^\}/' "${dbdir}/body.sh" | grep -c 'why_it_did_not_start')" = 3
+# Comments stripped first: the sentence still stands in one, as the record of
+# what it used to say, and a case that counts comments measures prose.
+check "no fixed guess about the first node is left in the code" \
+    not grep -q 'Is the first node running' \
+        <(grep -vE '^[[:space:]]*#' "${dbdir}/body.sh")
+# The journal is read from the attempt onwards, not from the whole history: an
+# older attempt's cause would otherwise be read as this one's.
+check "the journal is read from the attempt onwards" \
+    grep -q 'since "@' <<< "$(awk '/^unit_journal\(\) \{/,/^\}/' "${dbdir}/body.sh")"
+
+unset -f db_why
+unset whydir why_port why_unknown
+# ------------------------------------------- which branch start_cluster takes
+# The decision is its own function (cluster_action), so it can be measured
+# without a database: node_in_cluster, mariadb_running and other_node_answers
+# are stubbed, and grastate.dat is a file in the test folder - but
+# cluster_state_here and may_open_again are the ones out of the script, since
+# they are what is being measured. The answer is open / restart / start /
+# nothing.
+#
+# Two bolts are pinned here. The first: the old order asked "is mariadbd
+# running?", and the package leaves mariadbd running WITHOUT wsrep, so on a
+# fresh bootstrap node the restart branch won and the node tried to JOIN a
+# cluster that does not exist. Measured on Debian 13 on 17.10.2026,
+# "wsrep::connect(gcomm://db-1.ngc.test) failed: 7". The second: a node that
+# holds cluster state never came back after the whole cluster was down, for
+# the same reason, and only galera_new_cluster brought it up - so every reboot
+# of a small installation needed a hand.
+bootdir="${dbdir}/boot"
+mkdir -p "$bootdir"
+# db_act reads its inputs from the environment, because there are six of them:
+#   B   BOOTSTRAP            C    CHANGED
+#   INC node_in_cluster      RUN  mariadb_running   (0 = yes, 1 = no)
+#   OTH other_node_answers   (0 = another node answers)
+#   UUID / SEQ / STB         what grastate.dat says, UUID=none for no file
+#   NN  how many nodes the installation has
+db_act() (
+    db_load
+    BOOTSTRAP="${B:-0}"
+    CHANGED="${C:-0}"
+    # Caught in locals first: inside a stub, $1 would be the stub's OWN
+    # argument, and these are called without any. The first check below is
+    # what catches that.
+    local inc="${INC:-1}" run="${RUN:-1}" oth="${OTH:-1}" i
+    node_in_cluster() { return "$inc"; }
+    mariadb_running() { return "$run"; }
+    other_node_answers() { return "$oth"; }
+    GRASTATE="${bootdir}/grastate.dat"
+    if [ "${UUID:-none}" = none ]; then
+        rm -f "$GRASTATE"
+    else
+        printf '# GALERA saved state
+version: 2.1
+uuid:    %s
+seqno:   %s
+safe_to_bootstrap: %s
+'             "$UUID" "${SEQ:--1}" "${STB:-1}" > "$GRASTATE"
+    fi
+    NODES=()
+    for i in $(seq 1 "${NN:-1}"); do NODES+=("db-${i}.ngc.test:3306"); done
+    cluster_action
+)
+REAL=65b4d82f-ca64-11f1-8026-9f3253e2f221
+ZERO=00000000-0000-0000-0000-000000000000
+# The stubs have to be the ones talking before any answer counts.
+check "the measurement can make cluster_action answer at all"     test -n "$(db_act)"
+# --- the fresh bootstrap node, the first bolt
+check "a fresh bootstrap node opens the cluster, although mariadbd runs"     test "$(B=1 C=1 RUN=0 db_act)" = open
+check "and it opens it even when mariadbd does not run"     test "$(B=1 C=1 db_act)" = open
+check "a grastate.dat with the all-zero uuid is no cluster state"     test "$(B=1 C=1 RUN=0 UUID=$ZERO db_act)" = open
+# --- the node that comes back after the cluster was down, the second bolt
+check "a first node whose cluster is gone opens it again"     test "$(B=1 UUID=$REAL SEQ=14 db_act)" = open
+check "and it does so after a crash too, as long as it is alone"     test "$(B=1 UUID=$REAL SEQ=-1 NN=1 db_act)" = open
+# --- and every refusal, because opening is the branch that can cost data
+check "a node that is already a member is never bootstrapped again"     test "$(B=1 INC=0 UUID=$REAL SEQ=14 db_act)" = nothing
+check "a member picks up a new configuration with a restart"     test "$(B=1 C=1 INC=0 UUID=$REAL SEQ=14 db_act)" = restart
+check "nobody opens a cluster while another node answers"     test "$(B=1 OTH=0 UUID=$REAL SEQ=14 db_act)" = start
+check "a node that is not the first one never opens anything"     test "$(B=0 UUID=$REAL SEQ=14 db_act)" = start
+check "safe_to_bootstrap 0 refuses, that is Galera's own answer"     test "$(B=1 UUID=$REAL SEQ=14 STB=0 db_act)" = start
+check "with several nodes a crash refuses: no seqno, no decision"     test "$(B=1 UUID=$REAL SEQ=-1 NN=3 db_act)" = start
+check "with several nodes an orderly shutdown is allowed"     test "$(B=1 UUID=$REAL SEQ=14 NN=3 db_act)" = open
+# --- and the plain cases
+check "a running node that is no member reads the configuration again"     test "$(B=0 C=1 RUN=0 UUID=$REAL SEQ=14 db_act)" = restart
+check "a node that is down and not the first one just starts"     test "$(B=0 UUID=$REAL SEQ=14 db_act)" = start
+# --- the order itself has to stay the order
+check "cluster_action asks about membership before it asks about the service"     test "$(awk '/^cluster_action\(\) \{/,/^\}/' "${dbdir}/body.sh" | grep -nE 'node_in_cluster|mariadb_running' | head -1 | cut -d: -f2 | grep -c node_in_cluster)" = 1
+# other_node_answers really does talk to the network: a port nothing listens
+# on has to answer "no", or condition 2 would never refuse anything.
+db_reach() (
+    db_load
+    HOSTS=(127.0.0.1)
+    NGC_HOSTNAME=db-1.ngc.test
+    GALERA_PORT=1
+    other_node_answers && printf yes || printf no
+)
+check "other_node_answers says no for a port nothing listens on"     test "$(db_reach)" = no
+db_self() (
+    db_load
+    HOSTS=(db-1.ngc.test)
+    NGC_HOSTNAME=db-1.ngc.test
+    GALERA_PORT=1
+    other_node_answers && printf yes || printf no
+)
+check "and it does not count this node itself as another one"     test "$(db_self)" = no
+
+unset -f db_act db_reach db_self
+unset bootdir REAL ZERO
+
+# ------------------------------------------------- the key file MariaDB reads
+# file_key_management opens a "Salted__" file with the old EVP_BytesToKey of
+# OpenSSL over SHA-1. A file written with -pbkdf2 -md sha256 is sound, decrypts
+# fine with those same flags, and MariaDB still cannot read it: measured on a
+# fresh Debian 13 on 17.10.2026 as "Cannot decrypt .../keys.enc. Wrong key?",
+# whereupon file_key_management, InnoDB and the server fall. So the check here
+# is not "it decrypts" but "it decrypts the way MariaDB decrypts".
+db_keys() (
+    db_load
+    NGC_KEYS="${dbdir}/keys"
+    mkdir -p "$NGC_KEYS"
+    rm -f "${NGC_KEYS}/keys.enc" "${NGC_KEYS}/keyfile.key"
+    put_secret() { install -m 0400 "$1" "$2"; }
+    ensure_encryption_keys > /dev/null 2>&1 || exit 1
+    # Read it back the way the plugin does, and nothing else.
+    openssl enc -d -aes-256-cbc -md sha1 -in "${NGC_KEYS}/keys.enc"         -pass "file:${NGC_KEYS}/keyfile.key" 2>/dev/null
+)
+keys_out="$(db_keys)"
+check "the key file opens the way MariaDB's file_key_management opens it"     grep -qE '^1;[0-9a-f]{64}$' <<< "$keys_out"
+# And the flags themselves, named, so nobody puts the better derivation back
+# without reading why it is not there.
+check "the key file is not written with pbkdf2"     not grep -qE 'keys[.]enc.*pbkdf2|pbkdf2.*keys[.]enc'         <(awk '/^ensure_encryption_keys\(\) \{/,/^\}/' "${dbdir}/body.sh")
+check "the key file is written over sha1, as that plugin derives"     grep -q 'openssl enc -aes-256-cbc -md sha1 -salt'         <(awk '/^ensure_encryption_keys\(\) \{/,/^\}/' "${dbdir}/body.sh")
+
+unset -f db_keys
+unset keys_out
+
+# ---------------------------------------------------------------- the group mysql
+# A machine that never had MariaDB has no group mysql, and prepare makes the
+# two folders BEFORE ensure_packages installs it (render_ca_cnf writes into
+# NGC_TLS). Measured on a fresh Debian 13 on 17.10.2026: install died at
+# "chown: invalid group: 'root:mysql'" with RC=1, before anything was written.
+mkdir -p "${dbdir}/gbin"
+db_owner() (
+    db_load
+    PATH="${dbdir}/gbin:${PATH}"
+    db_dir_owner
+)
+printf '#!/bin/bash
+exit 2
+' > "${dbdir}/gbin/getent"
+chmod +x "${dbdir}/gbin/getent"
+check "without the group mysql the two folders stay with root alone"     test "$(db_owner)" = root:root
+printf '#!/bin/bash
+exit 0
+' > "${dbdir}/gbin/getent"
+check "with the group mysql the two folders go to it"     test "$(db_owner)" = root:mysql
+# prepare must not name the group itself: that is the line that died.
+check "prepare names no group that may not exist yet"     not grep -qE 'ensure_dir "\$NGC_(TLS|KEYS)" root:mysql'         <(awk '/^prepare\(\) \{/,/^\}/' "${dbdir}/body.sh")
+# And the handover has to sit after the packages, not before them.
+inst="$(awk '/^install_ngc_db\(\) \{/,/^\}/' "${dbdir}/body.sh")"
+pkg_ln="$(grep -n 'ensure_packages' <<< "$inst" | head -1 | cut -d: -f1)"
+dir_ln="$(grep -n 'ensure_db_dirs' <<< "$inst" | head -1 | cut -d: -f1)"
+check "install hands the folders to mysql after it installed MariaDB"     test -n "$pkg_ln" -a -n "$dir_ln" -a "${dir_ln:-0}" -gt "${pkg_ln:-0}"
+# configure calls prepare too, and there MariaDB is already running - but the
+# folders still have to end up with the group, not with root.
+check "configure hands the folders to mysql as well"     grep -q 'ensure_db_dirs' <<< "$(awk '/^configure_ngc_db\(\) \{/,/^\}/' "${dbdir}/body.sh")"
+
+unset -f db_owner
+unset inst pkg_ln dir_ln
+
+# ============================================================
+# WHAT A SECOND NODE RUNS INTO
+# ============================================================
+# Both measured on 24.10.2026 while db-2 and db-3 were built. Each stopped the
+# run, neither had anything to do with Galera, and neither can be hit on a
+# first node - which is why they had stayed hidden since 02.10.2026.
+
+# ------------------------------------------------- an address, not a name
+# Galera resolves wsrep_node_address itself and opens its receivers on whatever
+# it picks, while it tells the donor the value as written. db-3 opened its IST
+# receiver on a link-local IPv6 address and announced its name; the donor
+# resolved the name to IPv4, found nothing listening, and gave up with
+# "IST failed ... Connection refused".
+#
+# NOT addr as the name of the stub variable: resolve_node_address has a local
+# addr of its own and the stub runs inside its scope - it would read that empty
+# variable instead of this one.
+db_addr() (
+    db_load
+    pruef_addr="$1"
+    getent() { [ -n "$pruef_addr" ] || return 2; printf '%s STREAM db-2.ngc.test\n' "$pruef_addr"; }
+    NGC_HOSTNAME="${2:-db-2.ngc.test}"
+    # The node has to be in the list, even when it is given as an address.
+    NGC_NODES="${NODE1} ${NGC_HOSTNAME}:3306 ${NODE3}"
+    NGC_BOOTSTRAP=no NGC_PASSWORD_NGC="$PASS1" NGC_PASSWORD_MIGRATE="$PASS2"
+    NGC_CA_DIR=/etc/ngc/db-ca
+    read_answers > /dev/null 2>&1 || exit 1
+    SST_PASS="0123456789abcdef"
+    render_galera "$(cluster_list)"
+)
+check "a name that resolves becomes an address in wsrep_node_address" \
+    grep -qxF "wsrep_node_address=10.2.3.217" <(db_addr 10.2.3.217)
+check "and in bind-address" \
+    grep -qxF "bind-address=10.2.3.217" <(db_addr 10.2.3.217)
+check "no letter is left in either address line" \
+    not grep -qE "^(wsrep_node_address|bind-address)=.*[a-z]" <(db_addr 10.2.3.217)
+# The loopback is refused: a node that announces it never gets its data,
+# because the donor then calls itself. That was db-2, after hostnamectl had put
+# its real name on 127.0.1.1 the way Debian does.
+check "a name on 127.0.1.1 stops the run before anything is written" \
+    not db_addr 127.0.1.1
+check "a name on 127.0.0.1 does too" not db_addr 127.0.0.1
+# An address given as the name is taken as it is - nothing may be resolved, or
+# a machine without DNS could not be installed by address at all.
+check "an address given as the name is taken as it is" \
+    grep -qxF "wsrep_node_address=10.2.3.218" <(db_addr "" 10.2.3.218)
+
+# ------------------------------------------------- a secret that is already there
+# A key pair carried over from the first node arrives as root:root, and MariaDB
+# then says of its own key file "not found (Errcode: 13)" - which does not mean
+# it is missing but that it may not be read.
+check "the encryption keys that are already there are held" \
+    test "$(sed -n '/^ensure_encryption_keys() {/,/^}/p' "${dbdir}/body.sh" | grep -c 'hold_secret')" = 2
+check "the password for the copy to a new node is held too" \
+    test "$(sed -n '/^ensure_sst_password() {/,/^}/p' "${dbdir}/body.sh" | grep -c 'hold_secret')" = 1
+# And it goes through put_secret, so owner and mode are still set inside WORK -
+# a chmod on the file where it lies is the window put_secret exists to avoid.
+check "hold_secret puts the secret back through put_secret" \
+    test "$(sed -n '/^hold_secret() {/,/^}/p' "${dbdir}/body.sh" | grep -c 'put_secret ')" = 1
+check "and never chmods it where it lies" \
+    not grep -qE 'chmod .*"\$path"' <(sed -n '/^hold_secret() {/,/^}/p' "${dbdir}/body.sh")
+# What is already right is left alone, and silently: a run that finds
+# everything in order may not report a change.
+db_hold_ok() (
+    db_load
+    printf 'x' > "${dbdir}/held-ok"
+    stat() { echo "mysql:mysql 400"; }
+    put_secret() { echo "put_secret was called"; }
+    hold_secret "${dbdir}/held-ok" 2>&1
+)
+check "a secret already in order is left alone, and silently" test -z "$(db_hold_ok)"
+# And one that is not gets moved: root:root 0600 is what a copied key looks
+# like, and mysql cannot read that.
+db_hold_bad() (
+    db_load
+    printf 'x' > "${dbdir}/held-bad"
+    stat() { echo "root:root 600"; }
+    put_secret() { echo "put_secret ${2}"; }
+    hold_secret "${dbdir}/held-bad" 2>&1
+)
+check "a secret that mysql cannot read is put back into place" \
+    grep -q "put_secret ${dbdir}/held-bad" <<< "$(db_hold_bad)"
+
+unset -f db_addr db_hold_ok db_hold_bad
+
+unset -f db_load db_galera db_cacnf db_answers db_host db_cluster
+unset dbdir NODE1 NODE2 NODE3 PASS1 PASS2 missing unpinned head back prov forbidden good bad shell o
+unset cipher_val
+unset bootdir
+unset warn_line rm_line chk_line del_line purge_q line
