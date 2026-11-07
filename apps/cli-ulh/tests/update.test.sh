@@ -19,7 +19,7 @@ check "--check-update: up to date afterwards" grep -q 'up to date' <<< "$out"
 
 chmod 755 "$U/.test-change"                 # a local chmod must not block updates
 publish two
-out="$( cd "$U" && printf 'q\n' | bash ulh.sh 2>&1 )"; rc=$?
+out="$( cd "$U" && printf 'q\n' | bash apps/cli-ulh/ulh.sh 2>&1 )"; rc=$?
 check "start: updates and restarts" grep -q 'restarting' <<< "$out"
 check "start: then shows the menu (exit 0)" test "$rc" = 0 -a -n "$(grep 'Essential Tools' <<< "$out")"
 check "start: new commit is there" grep -q two "$U/.test-change"

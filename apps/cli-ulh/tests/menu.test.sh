@@ -19,5 +19,3 @@ check "--help (exit 0)" test "$rc" = 0 -a -n "$(grep 'Usage' <<< "$out")"
 out="$(cd "$ULH" && bash apps/cli-ulh/ulh.sh --bogus 2>&1)"; rc=$?
 check "unknown option (exit 1)" test "$rc" = 1
 
-out="$(cd / && printf 'q\n' | bash "${ULH}/ulh.sh" --no-update 2>&1)"; rc=$?
-check "old start command ulh.sh forwards (exit 0)" test "$rc" = 0
