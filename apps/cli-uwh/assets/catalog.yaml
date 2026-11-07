@@ -1,0 +1,984 @@
+# uwh - Katalog
+#
+# Jeder Eintrag beschreibt, WIE etwas installiert wird. Der Weg steht in 'provider':
+#
+#   winget      Paket aus der Windows-Paketquelle          id: Paketkennung
+#   msstore     App aus dem Microsoft Store                id: Paketkennung
+#   feature     Windows-Funktion (Systemsteuerung)         id: Funktionsname
+#   capability  Optionale Windows-Komponente               id: Komponentenname
+#   url         Direkter Download von einer https-Adresse  url:, sha256: (Pflicht), args:
+#   psmodule    PowerShell-Modul                           id: Modulname
+#   script      Skript neben dieser Datei                  file: name.ps1
+#
+# Weitere Felder:
+#   name         Anzeigename im Menue (hoechstens 24 Zeichen)
+#   description  Ein kurzer Satz, was es ist (hoechstens 31 Zeichen)
+#   category     Muss unten in 'categories' stehen
+#   scope        machine (Standard) oder user
+#   admin        true/false - sonst wird es aus dem provider abgeleitet
+#   reboot       required, wenn danach ein Neustart noetig ist
+#   recommended  true - im Menue vorausgewaehlt
+#   note         Hinweis, der vor der Ausfuehrung angezeigt wird
+#
+# Sprachen: Die Texte ohne Kuerzel sind Englisch und gelten fuer jede Sprache
+# ohne eigene Uebersetzung. Uebersetzt wird mit angehaengtem Kuerzel DE, ES,
+# IT oder FR - bei name, description, category, note, question und id:
+#
+#   description: Text editor
+#   descriptionDE: Texteditor
+#
+# Eine id je Sprache braucht es nur, wo der Hersteller jede Sprache als eigenes
+# Paket fuehrt (Firefox, Thunderbird). Namen von Programmen bleiben meist gleich.
+#
+# Fragen stehen unter 'actions' -> 'prompts' (Beispiel: Eintrag 'explorer'
+# unten). type ist text, yesno oder secret. 'secret' wird nie in ein Profil
+# geschrieben - bei Kennwoertern immer setzen.
+#
+# EIGENE PROGRAMME NICHT HIER EINTRAGEN. Diese Datei wird bei jeder
+# Aktualisierung von uwh ersetzt. Eigenes gehoert nach
+# data\eigene\config.yaml - oder in ein eigenes Repo, siehe config\repo.yaml.
+#
+# Wer an dieser Datei hier arbeitet, prueft danach (aus apps\cli-uwh\):
+#   .\uwh.cmd -Doctor                                      Aufbau
+#   powershell -ExecutionPolicy Bypass -File tests\sprache.tests.ps1  alles uebersetzt, passt es?
+#   powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1   gibt es das Paket?
+# Paketkennungen veralten - beim Aufbau waren 5 von 46 falsch.
+
+categories:
+  - Essentials
+  - Browsers
+  - Development
+  - 3D printing and CAD
+  - Media
+  - Remote access and network
+  - Communication
+  - Security
+  - Windows features
+  - Windows settings
+
+scripts:
+
+  # ----------------------------------------------------------------
+  # Essentials
+  # ----------------------------------------------------------------
+
+  7zip:
+    name: 7-Zip
+    description: Packs and unpacks archives
+    category: Essentials
+    descriptionDE: Packt und entpackt Archive
+    categoryDE: Grundausstattung
+    descriptionES: Comprime y extrae archivos
+    categoryES: Esenciales
+    descriptionIT: Comprime ed estrae archivi
+    categoryIT: Essenziali
+    descriptionFR: Crée et extrait des archives
+    categoryFR: Essentiels
+    provider: winget
+    id: 7zip.7zip
+    recommended: true
+
+  notepadpp:
+    name: Notepad++
+    description: Text editor
+    category: Essentials
+    descriptionDE: Texteditor
+    categoryDE: Grundausstattung
+    descriptionES: Editor de texto
+    categoryES: Esenciales
+    descriptionIT: Editor di testo
+    categoryIT: Essenziali
+    descriptionFR: Éditeur de texte
+    categoryFR: Essentiels
+    provider: winget
+    id: Notepad++.Notepad++
+    recommended: true
+
+  powertoys:
+    name: Microsoft PowerToys
+    description: Extra tools for Windows
+    category: Essentials
+    descriptionDE: Zusatzwerkzeuge für Windows
+    categoryDE: Grundausstattung
+    descriptionES: Utilidades extra para Windows
+    categoryES: Esenciales
+    descriptionIT: Strumenti extra per Windows
+    categoryIT: Essenziali
+    descriptionFR: Utilitaires pour Windows
+    categoryFR: Essentiels
+    provider: winget
+    id: Microsoft.PowerToys
+
+  terminal:
+    name: Windows Terminal
+    description: Modern command prompt
+    category: Essentials
+    descriptionDE: Moderne Eingabeaufforderung
+    categoryDE: Grundausstattung
+    descriptionES: Consola moderna de comandos
+    categoryES: Esenciales
+    descriptionIT: Prompt dei comandi moderno
+    categoryIT: Essenziali
+    descriptionFR: Invite de commandes moderne
+    categoryFR: Essentiels
+    provider: winget
+    id: Microsoft.WindowsTerminal
+    recommended: true
+
+  everything:
+    name: Everything
+    description: Finds files instantly
+    category: Essentials
+    descriptionDE: Findet Dateien sofort
+    categoryDE: Grundausstattung
+    descriptionES: Encuentra archivos al instante
+    categoryES: Esenciales
+    descriptionIT: Trova i file all'istante
+    categoryIT: Essenziali
+    descriptionFR: Trouve les fichiers aussitôt
+    categoryFR: Essentiels
+    provider: winget
+    id: voidtools.Everything
+
+  windirstat:
+    name: WinDirStat
+    description: Shows what fills the disk
+    category: Essentials
+    descriptionDE: Zeigt, was den Speicher belegt
+    categoryDE: Grundausstattung
+    descriptionES: Muestra qué ocupa el disco
+    categoryES: Esenciales
+    descriptionIT: Mostra cosa occupa il disco
+    categoryIT: Essenziali
+    descriptionFR: Montre ce qui remplit le disque
+    categoryFR: Essentiels
+    provider: winget
+    id: WinDirStat.WinDirStat
+
+  rufus:
+    name: Rufus
+    description: Creates bootable USB sticks
+    category: Essentials
+    descriptionDE: Erstellt bootfähige USB-Sticks
+    categoryDE: Grundausstattung
+    descriptionES: Crea memorias USB de arranque
+    categoryES: Esenciales
+    descriptionIT: Crea chiavette USB avviabili
+    categoryIT: Essenziali
+    descriptionFR: Crée des clés USB amorçables
+    categoryFR: Essentiels
+    provider: winget
+    id: Rufus.Rufus
+
+  # ----------------------------------------------------------------
+  # Browsers
+  # ----------------------------------------------------------------
+
+  # Mozilla fuehrt jede Sprache als eigenes Paket - deshalb eine id je
+  # Sprache. Ohne Kuerzel kommt Englisch. --locale hilft nicht: das ist bei
+  # winget ein harter Filter, der Pakete ohne passenden Installer ganz
+  # scheitern laesst.
+  firefox:
+    name: Mozilla Firefox
+    description: Web browser
+    category: Browsers
+    descriptionDE: Webbrowser
+    categoryDE: Browser
+    descriptionES: Navegador web
+    categoryES: Navegadores
+    descriptionIT: Browser web
+    categoryIT: Browser
+    descriptionFR: Navigateur web
+    categoryFR: Navigateurs
+    provider: winget
+    id: Mozilla.Firefox
+    idDE: Mozilla.Firefox.de
+    idES: Mozilla.Firefox.es-ES
+    idIT: Mozilla.Firefox.it
+    idFR: Mozilla.Firefox.fr
+    recommended: true
+
+  chrome:
+    name: Google Chrome
+    description: Web browser
+    category: Browsers
+    descriptionDE: Webbrowser
+    categoryDE: Browser
+    descriptionES: Navegador web
+    categoryES: Navegadores
+    descriptionIT: Browser web
+    categoryIT: Browser
+    descriptionFR: Navigateur web
+    categoryFR: Navigateurs
+    provider: winget
+    id: Google.Chrome
+
+  brave:
+    name: Brave
+    description: Web browser with ad blocker
+    category: Browsers
+    descriptionDE: Webbrowser mit Werbeblocker
+    categoryDE: Browser
+    descriptionES: Navegador sin anuncios
+    categoryES: Navegadores
+    descriptionIT: Browser con blocco pubblicità
+    categoryIT: Browser
+    descriptionFR: Navigateur avec bloqueur de pub
+    categoryFR: Navigateurs
+    provider: winget
+    id: Brave.Brave
+
+  # ----------------------------------------------------------------
+  # Development
+  # ----------------------------------------------------------------
+
+  git:
+    name: Git
+    description: Version control
+    category: Development
+    descriptionDE: Versionsverwaltung
+    categoryDE: Entwicklung
+    descriptionES: Control de versiones
+    categoryES: Desarrollo
+    descriptionIT: Controllo di versione
+    categoryIT: Sviluppo
+    descriptionFR: Gestion de versions
+    categoryFR: Développement
+    provider: winget
+    id: Git.Git
+
+  vscode:
+    name: Visual Studio Code
+    description: Code editor
+    category: Development
+    descriptionDE: Code-Editor
+    categoryDE: Entwicklung
+    descriptionES: Editor de código
+    categoryES: Desarrollo
+    descriptionIT: Editor di codice
+    categoryIT: Sviluppo
+    descriptionFR: Éditeur de code
+    categoryFR: Développement
+    provider: winget
+    id: Microsoft.VisualStudioCode
+
+  nodejs:
+    name: Node.js LTS
+    description: JavaScript runtime
+    category: Development
+    descriptionDE: JavaScript-Laufzeitumgebung
+    categoryDE: Entwicklung
+    descriptionES: Entorno de ejecución JavaScript
+    categoryES: Desarrollo
+    descriptionIT: Runtime JavaScript
+    categoryIT: Sviluppo
+    descriptionFR: Environnement JavaScript
+    categoryFR: Développement
+    provider: winget
+    id: OpenJS.NodeJS.LTS
+
+  python:
+    name: Python 3.12
+    description: Programming language
+    category: Development
+    descriptionDE: Programmiersprache
+    categoryDE: Entwicklung
+    descriptionES: Lenguaje de programación
+    categoryES: Desarrollo
+    descriptionIT: Linguaggio di programmazione
+    categoryIT: Sviluppo
+    descriptionFR: Langage de programmation
+    categoryFR: Développement
+    provider: winget
+    id: Python.Python.3.12
+
+  golang:
+    name: Go
+    description: Programming language
+    category: Development
+    descriptionDE: Programmiersprache
+    categoryDE: Entwicklung
+    descriptionES: Lenguaje de programación
+    categoryES: Desarrollo
+    descriptionIT: Linguaggio di programmazione
+    categoryIT: Sviluppo
+    descriptionFR: Langage de programmation
+    categoryFR: Développement
+    provider: winget
+    id: GoLang.Go
+
+  rust:
+    name: Rust
+    description: Programming language
+    category: Development
+    descriptionDE: Programmiersprache
+    categoryDE: Entwicklung
+    descriptionES: Lenguaje de programación
+    categoryES: Desarrollo
+    descriptionIT: Linguaggio di programmazione
+    categoryIT: Sviluppo
+    descriptionFR: Langage de programmation
+    categoryFR: Développement
+    provider: winget
+    id: Rustlang.Rustup
+
+  dotnetsdk:
+    name: .NET SDK 8
+    description: Development kit for .NET
+    category: Development
+    descriptionDE: Entwicklungspaket für .NET
+    categoryDE: Entwicklung
+    descriptionES: Kit de desarrollo para .NET
+    categoryES: Desarrollo
+    descriptionIT: Kit di sviluppo per .NET
+    categoryIT: Sviluppo
+    descriptionFR: Kit de développement .NET
+    categoryFR: Développement
+    provider: winget
+    id: Microsoft.DotNet.SDK.8
+
+  pwsh:
+    name: PowerShell 7
+    description: Current PowerShell
+    category: Development
+    descriptionDE: Aktuelle PowerShell
+    categoryDE: Entwicklung
+    descriptionES: PowerShell actual
+    categoryES: Desarrollo
+    descriptionIT: PowerShell attuale
+    categoryIT: Sviluppo
+    descriptionFR: PowerShell actuelle
+    categoryFR: Développement
+    provider: winget
+    id: Microsoft.PowerShell
+
+  dockerdesktop:
+    name: Docker Desktop
+    description: Containers on the desktop
+    category: Development
+    descriptionDE: Container auf dem Arbeitsplatz
+    categoryDE: Entwicklung
+    descriptionES: Contenedores en el escritorio
+    categoryES: Desarrollo
+    descriptionIT: Container sul desktop
+    categoryIT: Sviluppo
+    descriptionFR: Conteneurs sur le poste
+    categoryFR: Développement
+    provider: winget
+    id: Docker.DockerDesktop
+    reboot: required
+    note: Needs WSL2. Please select it as well.
+    noteDE: Braucht WSL2. Bitte vorher mit auswählen.
+    noteES: Necesita WSL2. Selecciónelo también.
+    noteIT: Richiede WSL2. Selezionarlo insieme.
+    noteFR: Nécessite WSL2. Sélectionnez-le aussi.
+
+  # ----------------------------------------------------------------
+  # 3D printing and CAD
+  # ----------------------------------------------------------------
+
+  orcaslicer:
+    name: OrcaSlicer
+    description: Slicer for 3D printers
+    category: 3D printing and CAD
+    descriptionDE: Slicer für 3D-Drucker
+    categoryDE: 3D-Druck und CAD
+    descriptionES: Slicer para impresoras 3D
+    categoryES: Impresión 3D y CAD
+    descriptionIT: Slicer per stampanti 3D
+    categoryIT: Stampa 3D e CAD
+    descriptionFR: Trancheur pour imprimantes 3D
+    categoryFR: Impression 3D et CAO
+    provider: winget
+    id: SoftFever.OrcaSlicer
+
+  prusaslicer:
+    name: PrusaSlicer
+    description: Slicer for 3D printers
+    category: 3D printing and CAD
+    descriptionDE: Slicer für 3D-Drucker
+    categoryDE: 3D-Druck und CAD
+    descriptionES: Slicer para impresoras 3D
+    categoryES: Impresión 3D y CAD
+    descriptionIT: Slicer per stampanti 3D
+    categoryIT: Stampa 3D e CAD
+    descriptionFR: Trancheur pour imprimantes 3D
+    categoryFR: Impression 3D et CAO
+    provider: winget
+    id: Prusa3D.PrusaSlicer
+
+  cura:
+    name: Ultimaker Cura
+    description: Slicer for 3D printers
+    category: 3D printing and CAD
+    descriptionDE: Slicer für 3D-Drucker
+    categoryDE: 3D-Druck und CAD
+    descriptionES: Slicer para impresoras 3D
+    categoryES: Impresión 3D y CAD
+    descriptionIT: Slicer per stampanti 3D
+    categoryIT: Stampa 3D e CAD
+    descriptionFR: Trancheur pour imprimantes 3D
+    categoryFR: Impression 3D et CAO
+    provider: winget
+    id: Ultimaker.Cura
+
+  bambustudio:
+    name: Bambu Studio
+    description: Slicer for Bambu Lab printers
+    category: 3D printing and CAD
+    descriptionDE: Slicer für Bambu-Lab-Drucker
+    categoryDE: 3D-Druck und CAD
+    descriptionES: Slicer para impresoras Bambu
+    categoryES: Impresión 3D y CAD
+    descriptionIT: Slicer per stampanti Bambu
+    categoryIT: Stampa 3D e CAD
+    descriptionFR: Trancheur pour Bambu Lab
+    categoryFR: Impression 3D et CAO
+    provider: winget
+    id: Bambulab.Bambustudio
+
+  freecad:
+    name: FreeCAD
+    description: 3D design (CAD)
+    category: 3D printing and CAD
+    descriptionDE: 3D-Konstruktion
+    categoryDE: 3D-Druck und CAD
+    descriptionES: Diseño 3D (CAD)
+    categoryES: Impresión 3D y CAD
+    descriptionIT: Progettazione 3D (CAD)
+    categoryIT: Stampa 3D e CAD
+    descriptionFR: Conception 3D (CAO)
+    categoryFR: Impression 3D et CAO
+    provider: winget
+    id: FreeCAD.FreeCAD
+
+  # ----------------------------------------------------------------
+  # Media
+  # ----------------------------------------------------------------
+
+  vlc:
+    name: VLC media player
+    description: Plays almost anything
+    category: Media
+    descriptionDE: Spielt so gut wie alles ab
+    categoryDE: Medien
+    descriptionES: Reproduce casi todo
+    categoryES: Multimedia
+    descriptionIT: Riproduce quasi tutto
+    categoryIT: Multimedia
+    descriptionFR: Lit presque tout
+    categoryFR: Multimédia
+    provider: winget
+    id: VideoLAN.VLC
+    recommended: true
+
+  obs:
+    name: OBS Studio
+    description: Record and stream the screen
+    category: Media
+    descriptionDE: Bildschirm aufnehmen, streamen
+    categoryDE: Medien
+    descriptionES: Graba y transmite la pantalla
+    categoryES: Multimedia
+    descriptionIT: Registra e trasmette lo schermo
+    categoryIT: Multimedia
+    descriptionFR: Enregistrer et diffuser l'écran
+    categoryFR: Multimédia
+    provider: winget
+    id: OBSProject.OBSStudio
+
+  audacity:
+    name: Audacity
+    description: Record and edit audio
+    category: Media
+    descriptionDE: Tonaufnahme und -bearbeitung
+    categoryDE: Medien
+    descriptionES: Graba y edita audio
+    categoryES: Multimedia
+    descriptionIT: Registra e modifica l'audio
+    categoryIT: Multimedia
+    descriptionFR: Enregistrer et éditer du son
+    categoryFR: Multimédia
+    provider: winget
+    id: Audacity.Audacity
+
+  gimp:
+    name: GIMP
+    description: Image editing
+    category: Media
+    descriptionDE: Bildbearbeitung
+    categoryDE: Medien
+    descriptionES: Edición de imágenes
+    categoryES: Multimedia
+    descriptionIT: Fotoritocco
+    categoryIT: Multimedia
+    descriptionFR: Retouche d'images
+    categoryFR: Multimédia
+    provider: winget
+    id: GIMP.GIMP
+
+  inkscape:
+    name: Inkscape
+    description: Vector graphics
+    category: Media
+    descriptionDE: Vektorgrafik
+    categoryDE: Medien
+    descriptionES: Gráficos vectoriales
+    categoryES: Multimedia
+    descriptionIT: Grafica vettoriale
+    categoryIT: Multimedia
+    descriptionFR: Dessin vectoriel
+    categoryFR: Multimédia
+    provider: winget
+    id: Inkscape.Inkscape
+
+  paintnet:
+    name: Paint.NET
+    description: Simple image editing
+    category: Media
+    descriptionDE: Einfache Bildbearbeitung
+    categoryDE: Medien
+    descriptionES: Edición de imágenes sencilla
+    categoryES: Multimedia
+    descriptionIT: Fotoritocco semplice
+    categoryIT: Multimedia
+    descriptionFR: Retouche d'images simple
+    categoryFR: Multimédia
+    provider: winget
+    id: dotPDN.PaintDotNet
+
+  handbrake:
+    name: HandBrake
+    description: Convert videos
+    category: Media
+    descriptionDE: Video umwandeln
+    categoryDE: Medien
+    descriptionES: Convierte vídeos
+    categoryES: Multimedia
+    descriptionIT: Converte video
+    categoryIT: Multimedia
+    descriptionFR: Convertit des vidéos
+    categoryFR: Multimédia
+    provider: winget
+    id: HandBrake.HandBrake
+
+  # ----------------------------------------------------------------
+  # Remote access and network
+  # ----------------------------------------------------------------
+
+  anydesk:
+    name: AnyDesk
+    description: Remote support
+    category: Remote access and network
+    descriptionDE: Fernwartung
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Asistencia remota
+    categoryES: Acceso remoto y redes
+    descriptionIT: Assistenza remota
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Assistance à distance
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: AnyDesk.AnyDesk
+
+  tailscale:
+    name: Tailscale
+    description: Private network over internet
+    category: Remote access and network
+    descriptionDE: Privates Netz übers Internet
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Red privada por Internet
+    categoryES: Acceso remoto y redes
+    descriptionIT: Rete privata via Internet
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Réseau privé via Internet
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: Tailscale.Tailscale
+
+  winscp:
+    name: WinSCP
+    description: Transfer files via SFTP
+    category: Remote access and network
+    descriptionDE: Dateien per SFTP übertragen
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Transfiere archivos por SFTP
+    categoryES: Acceso remoto y redes
+    descriptionIT: Trasferisce file via SFTP
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Transfert de fichiers SFTP
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: WinSCP.WinSCP
+
+  putty:
+    name: PuTTY
+    description: SSH connections
+    category: Remote access and network
+    descriptionDE: SSH-Verbindungen
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Conexiones SSH
+    categoryES: Acceso remoto y redes
+    descriptionIT: Connessioni SSH
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Connexions SSH
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: PuTTY.PuTTY
+
+  wireshark:
+    name: Wireshark
+    description: Capture network traffic
+    category: Remote access and network
+    descriptionDE: Netzwerkverkehr mitlesen
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Captura el tráfico de red
+    categoryES: Acceso remoto y redes
+    descriptionIT: Cattura il traffico di rete
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Capture le trafic réseau
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: WiresharkFoundation.Wireshark
+
+  advancedipscanner:
+    name: Advanced IP Scanner
+    description: Finds devices on the network
+    category: Remote access and network
+    descriptionDE: Geräte im Netzwerk finden
+    categoryDE: Fernzugriff und Netzwerk
+    descriptionES: Encuentra equipos en la red
+    categoryES: Acceso remoto y redes
+    descriptionIT: Trova i dispositivi in rete
+    categoryIT: Accesso remoto e rete
+    descriptionFR: Trouve les appareils du réseau
+    categoryFR: Accès distant et réseau
+    provider: winget
+    id: Famatech.AdvancedIPScanner
+
+  # ----------------------------------------------------------------
+  # Communication
+  # ----------------------------------------------------------------
+
+  thunderbird:
+    name: Mozilla Thunderbird
+    description: Email program
+    category: Communication
+    descriptionDE: E-Mail-Programm
+    categoryDE: Kommunikation
+    descriptionES: Programa de correo
+    categoryES: Comunicación
+    descriptionIT: Programma di posta
+    categoryIT: Comunicazione
+    descriptionFR: Logiciel de messagerie
+    categoryFR: Communication
+    provider: winget
+    id: Mozilla.Thunderbird
+    idDE: Mozilla.Thunderbird.de
+    idES: Mozilla.Thunderbird.es-ES
+    idIT: Mozilla.Thunderbird.it
+    idFR: Mozilla.Thunderbird.fr
+
+  discord:
+    name: Discord
+    description: Chat and voice
+    category: Communication
+    descriptionDE: Chat und Sprache
+    categoryDE: Kommunikation
+    descriptionES: Chat y voz
+    categoryES: Comunicación
+    descriptionIT: Chat e voce
+    categoryIT: Comunicazione
+    descriptionFR: Chat et voix
+    categoryFR: Communication
+    provider: winget
+    id: Discord.Discord
+
+  telegram:
+    name: Telegram Desktop
+    description: Messenger
+    category: Communication
+    descriptionDE: Messenger
+    categoryDE: Kommunikation
+    descriptionES: Mensajería
+    categoryES: Comunicación
+    descriptionIT: Messaggistica
+    categoryIT: Comunicazione
+    descriptionFR: Messagerie
+    categoryFR: Communication
+    provider: winget
+    id: Telegram.TelegramDesktop
+
+  signal:
+    name: Signal
+    description: Encrypted messenger
+    category: Communication
+    descriptionDE: Verschlüsselter Messenger
+    categoryDE: Kommunikation
+    descriptionES: Mensajería cifrada
+    categoryES: Comunicación
+    descriptionIT: Messaggistica cifrata
+    categoryIT: Comunicazione
+    descriptionFR: Messagerie chiffrée
+    categoryFR: Communication
+    provider: winget
+    id: OpenWhisperSystems.Signal
+
+  # ----------------------------------------------------------------
+  # Security
+  # ----------------------------------------------------------------
+
+  keepassxc:
+    name: KeePassXC
+    description: Manage passwords locally
+    category: Security
+    descriptionDE: Passwörter lokal verwalten
+    categoryDE: Sicherheit
+    descriptionES: Gestiona contraseñas en local
+    categoryES: Seguridad
+    descriptionIT: Gestisce le password in locale
+    categoryIT: Sicurezza
+    descriptionFR: Gère les mots de passe en local
+    categoryFR: Sécurité
+    provider: winget
+    id: KeePassXCTeam.KeePassXC
+
+  bitwarden:
+    name: Bitwarden
+    description: Password manager with sync
+    category: Security
+    descriptionDE: Passwortverwaltung mit Abgleich
+    categoryDE: Sicherheit
+    descriptionES: Contraseñas sincronizadas
+    categoryES: Seguridad
+    descriptionIT: Gestione password sincronizzata
+    categoryIT: Sicurezza
+    descriptionFR: Mots de passe synchronisés
+    categoryFR: Sécurité
+    provider: winget
+    id: Bitwarden.Bitwarden
+
+  veracrypt:
+    name: VeraCrypt
+    description: Encrypt drives
+    category: Security
+    descriptionDE: Datenträger verschlüsseln
+    categoryDE: Sicherheit
+    descriptionES: Cifra unidades de disco
+    categoryES: Seguridad
+    descriptionIT: Cifra unità e dischi
+    categoryIT: Sicurezza
+    descriptionFR: Chiffre les disques
+    categoryFR: Sécurité
+    provider: winget
+    id: IDRIX.VeraCrypt
+
+  # ----------------------------------------------------------------
+  # Windows features
+  # ----------------------------------------------------------------
+
+  wsl:
+    name: WSL2
+    description: Linux on Windows
+    category: Windows features
+    descriptionDE: Linux unter Windows
+    categoryDE: Windows-Funktionen
+    descriptionES: Linux en Windows
+    categoryES: Características de Windows
+    descriptionIT: Linux su Windows
+    categoryIT: Funzionalità di Windows
+    descriptionFR: Linux sous Windows
+    categoryFR: Fonctionnalités Windows
+    provider: feature
+    id: Microsoft-Windows-Subsystem-Linux
+    reboot: required
+
+  vmplatform:
+    name: VM Platform
+    nameDE: VM-Plattform
+    nameES: Plataforma de VM
+    nameIT: Piattaforma VM
+    nameFR: Plateforme VM
+    description: Basis for WSL2 and Docker
+    category: Windows features
+    descriptionDE: Basis für WSL2 und Docker
+    categoryDE: Windows-Funktionen
+    descriptionES: Base para WSL2 y Docker
+    categoryES: Características de Windows
+    descriptionIT: Base per WSL2 e Docker
+    categoryIT: Funzionalità di Windows
+    descriptionFR: Base pour WSL2 et Docker
+    categoryFR: Fonctionnalités Windows
+    provider: feature
+    id: VirtualMachinePlatform
+    reboot: required
+
+  hyperv:
+    name: Hyper-V
+    description: Virtualization by Microsoft
+    category: Windows features
+    descriptionDE: Virtualisierung von Microsoft
+    categoryDE: Windows-Funktionen
+    descriptionES: Virtualización de Microsoft
+    categoryES: Características de Windows
+    descriptionIT: Virtualizzazione di Microsoft
+    categoryIT: Funzionalità di Windows
+    descriptionFR: Virtualisation de Microsoft
+    categoryFR: Fonctionnalités Windows
+    provider: feature
+    id: Microsoft-Hyper-V-All
+    reboot: required
+    note: Only available in Windows Pro and Enterprise.
+    noteDE: Nur in Windows Pro und Enterprise verfügbar.
+    noteES: Solo disponible en Windows Pro y Enterprise.
+    noteIT: Disponibile solo in Windows Pro ed Enterprise.
+    noteFR: Disponible uniquement dans Windows Pro et Entreprise.
+
+  netfx3:
+    name: .NET Framework 3.5
+    description: For older programs
+    category: Windows features
+    descriptionDE: Für ältere Programme
+    categoryDE: Windows-Funktionen
+    descriptionES: Para programas antiguos
+    categoryES: Características de Windows
+    descriptionIT: Per programmi meno recenti
+    categoryIT: Funzionalità di Windows
+    descriptionFR: Pour les anciens programmes
+    categoryFR: Fonctionnalités Windows
+    provider: feature
+    id: NetFx3
+
+  opensshclient:
+    name: OpenSSH Client
+    nameDE: OpenSSH-Client
+    nameES: Cliente OpenSSH
+    nameIT: Client OpenSSH
+    nameFR: Client OpenSSH
+    description: SSH from the command prompt
+    category: Windows features
+    descriptionDE: SSH aus der Eingabeaufforderung
+    categoryDE: Windows-Funktionen
+    descriptionES: SSH desde la consola
+    categoryES: Características de Windows
+    descriptionIT: SSH dal prompt dei comandi
+    categoryIT: Funzionalità di Windows
+    descriptionFR: SSH en ligne de commande
+    categoryFR: Fonctionnalités Windows
+    provider: capability
+    id: OpenSSH.Client~~~~0.0.1.0
+
+  opensshserver:
+    name: OpenSSH Server
+    nameDE: OpenSSH-Server
+    nameES: Servidor OpenSSH
+    nameIT: Server OpenSSH
+    nameFR: Serveur OpenSSH
+    description: SSH access to this PC
+    category: Windows features
+    descriptionDE: SSH-Zugang zu diesem Rechner
+    categoryDE: Windows-Funktionen
+    descriptionES: Acceso SSH a este equipo
+    categoryES: Características de Windows
+    descriptionIT: Accesso SSH a questo PC
+    categoryIT: Funzionalità di Windows
+    descriptionFR: Accès SSH à ce PC
+    categoryFR: Fonctionnalités Windows
+    provider: capability
+    id: OpenSSH.Server~~~~0.0.1.0
+
+  # ----------------------------------------------------------------
+  # Windows settings (Skripte liegen neben dieser Datei)
+  # ----------------------------------------------------------------
+
+  # Ja/Nein-Antworten heissen intern immer ja/nein, egal in welcher Sprache
+  # gefragt wurde - so stehen sie auch in Profilen.
+  explorer:
+    name: Tidy up Explorer
+    nameDE: Explorer aufräumen
+    nameES: Ajustar el Explorador
+    nameIT: Sistemare Esplora file
+    nameFR: Ajuster l'Explorateur
+    description: Shows file extensions and more
+    category: Windows settings
+    descriptionDE: Zeigt Dateiendungen und mehr
+    categoryDE: Windows-Einstellungen
+    descriptionES: Muestra extensiones y más
+    categoryES: Configuración de Windows
+    descriptionIT: Mostra estensioni e altro
+    categoryIT: Impostazioni di Windows
+    descriptionFR: Affiche les extensions et plus
+    categoryFR: Paramètres Windows
+    provider: script
+    file: explorer.ps1
+    admin: false
+    actions:
+      - name: install
+        description: Apply settings
+        descriptionDE: Einstellungen setzen
+        descriptionES: Aplicar ajustes
+        descriptionIT: Applica impostazioni
+        descriptionFR: Appliquer les réglages
+        prompts:
+          - question: Always show file extensions?
+            questionDE: Dateiendungen immer anzeigen?
+            questionES: ¿Mostrar siempre las extensiones?
+            questionIT: Mostrare sempre le estensioni dei file?
+            questionFR: Toujours afficher les extensions ?
+            variable: ENDUNGEN
+            type: yesno
+            default: ja
+          - question: Show hidden files?
+            questionDE: Versteckte Dateien anzeigen?
+            questionES: ¿Mostrar archivos ocultos?
+            questionIT: Mostrare i file nascosti?
+            questionFR: Afficher les fichiers cachés ?
+            variable: VERSTECKT
+            type: yesno
+            default: nein
+
+  # Der Plan wird als Zahl gewaehlt - die versteht jede Sprache. Die alten
+  # Antworten (ausgewogen, hoechstleistung, energiesparen) gelten weiter.
+  energie:
+    name: Power plan
+    nameDE: Energieplan
+    nameES: Plan de energía
+    nameIT: Piano energetico
+    nameFR: Mode d'alimentation
+    description: When the PC goes to sleep
+    category: Windows settings
+    descriptionDE: Wann der Rechner schlafen geht
+    categoryDE: Windows-Einstellungen
+    descriptionES: Cuándo se suspende el equipo
+    categoryES: Configuración de Windows
+    descriptionIT: Quando il PC va in sospensione
+    categoryIT: Impostazioni di Windows
+    descriptionFR: Quand le PC se met en veille
+    categoryFR: Paramètres Windows
+    provider: script
+    file: energie.ps1
+    admin: true
+    actions:
+      - name: install
+        description: Set power plan
+        descriptionDE: Energieplan setzen
+        descriptionES: Establecer el plan de energía
+        descriptionIT: Imposta il piano energetico
+        descriptionFR: Définir le mode d'alimentation
+        prompts:
+          - question: "Plan: 1 = Balanced, 2 = High performance, 3 = Power saver"
+            questionDE: "Plan: 1 = Ausbalanciert, 2 = Höchstleistung, 3 = Energiesparmodus"
+            questionES: "Plan: 1 = Equilibrado, 2 = Alto rendimiento, 3 = Economizador"
+            questionIT: "Piano: 1 = Bilanciato, 2 = Prestazioni elevate, 3 = Risparmio di energia"
+            questionFR: "Mode : 1 = Utilisation normale, 2 = Performances élevées, 3 = Économies d'énergie"
+            variable: PLAN
+            type: text
+            default: '1'
+          - question: Turn off the screen after how many minutes? (0 = never)
+            questionDE: Bildschirm aus nach wie vielen Minuten? (0 = nie)
+            questionES: ¿Apagar la pantalla tras cuántos minutos? (0 = nunca)
+            questionIT: Spegnere lo schermo dopo quanti minuti? (0 = mai)
+            questionFR: Éteindre l'écran après combien de minutes ? (0 = jamais)
+            variable: BILDSCHIRM
+            type: text
+            default: '15'

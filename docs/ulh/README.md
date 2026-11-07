@@ -1,6 +1,6 @@
 # ulh - unknown linux helper
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](../../LICENSE)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-00457C.svg?logo=paypal)](https://www.paypal.com/donate/?hosted_button_id=6CDEVZGJWTNQQ)
 
 A menu for the Linux terminal that installs, updates, configures and removes software:
@@ -26,10 +26,8 @@ answer a few questions, done - ulh keeps itself up to date.
 
 No wget? `curl -sSL https://raw.githubusercontent.com/sorglos-it/unknown-helper/main/tools/ulh/install.sh | bash`.
 By hand: `git clone https://github.com/sorglos-it/unknown-helper.git ~/unknown-helper && bash ~/unknown-helper/apps/cli-ulh/ulh.sh`.
-Installed ulh before, or used the older one-liner
-`wget -qO - https://raw.githubusercontent.com/sorglos-it/unknown-helper/main/tools/ulh/install.sh | bash && cd ~/unknown-helper && bash ulh.sh`?
-That keeps working - old installations update themselves and move your own files
-to the new places.
+ulh used to live in its own repository `sorglos-it/ulh`. That repository is gone:
+install ulh again with the line above - older copies no longer update themselves.
 
 > **Deploy by cloning, not by copying.** Copying the files from a Windows machine
 > (SMB, SCP, rsync from a checked-out working copy) can carry CRLF line endings
@@ -81,7 +79,7 @@ only lists scripts that work on your distribution. `s` inside the results starts
 new search, `b` goes back, `q` quits.
 
 What the 101 scripts cover (network, web servers, databases, containers, languages,
-editors, shells, monitoring, backup, system management ...): **[docs/ulh/scripts.md](docs/ulh/scripts.md)**.
+editors, shells, monitoring, backup, system management ...): **[docs/ulh/scripts.md](scripts.md)**.
 
 ## Languages
 
@@ -144,7 +142,7 @@ scripts:
 ```
 
 Works for ulh's scripts and your own. Details, authentication and troubleshooting:
-**[docs/ulh/guide.md](docs/ulh/guide.md)**.
+**[docs/ulh/guide.md](guide.md)**.
 
 ## Supported distributions
 
@@ -170,10 +168,10 @@ ulh as root.
 
 | Document | What is in it |
 |---|---|
-| [Guide](docs/ulh/guide.md) | folders, catalog, answer.yaml, custom repositories, writing scripts, troubleshooting |
-| [Scripts](docs/ulh/scripts.md) | all 101 scripts with actions, sudo and distributions |
+| [Guide](guide.md) | folders, catalog, answer.yaml, custom repositories, writing scripts, troubleshooting |
+| [Scripts](scripts.md) | all 101 scripts with actions, sudo and distributions |
 | [Changes](CHANGELOG.md) | version history |
-| [Backstory](docs/ulh/backstory.md) | how "unknown linux helper" got its name - featuring Kevin and the Unknown Man |
+| [Backstory](backstory.md) | how "unknown linux helper" got its name - featuring Kevin and the Unknown Man |
 
 ## Development
 
@@ -184,12 +182,12 @@ bash apps/cli-ulh/tests/run.sh          # Linux: syntax, catalog, menu, updates 
 bash tools/ulh/gen-scripts-doc.sh       # refresh docs/ulh/scripts.md from the catalog
 ```
 
-Contributions welcome - see [docs/ulh/guide.md](docs/ulh/guide.md#script-development).
+Contributions welcome - see [docs/ulh/guide.md](guide.md#script-development).
 Questions? Open an issue on GitHub.
 
 ## License
 
-MIT - see [LICENSE](LICENSE). ulh ships [yq](https://github.com/mikefarah/yq) (MIT),
+MIT - see [LICENSE](../../LICENSE). ulh ships [yq](https://github.com/mikefarah/yq) (MIT),
 see [THIRD-PARTY.md](THIRD-PARTY.md).
 
 ## Donate via PayPal

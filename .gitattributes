@@ -1,15 +1,24 @@
-# ulh is a Linux tool - every text file must stay LF, even in a Windows
-# working copy. Without this a copy/rsync deploy from Windows produces
-# "/bin/bash^M: bad interpreter" on the target machine.
-* text=auto eol=lf
+* text=auto
 
-*.sh      text eol=lf
-*.yaml    text eol=lf
-*.yml     text eol=lf
-*.md      text eol=lf
-*.example text eol=lf
-LICENSE   text eol=lf
-VERSION   text eol=lf
+# ulh is a Linux tool - its text files stay LF, even in a Windows working copy.
+# Without this a copy/rsync deploy from Windows gives "/bin/bash^M: bad interpreter".
+apps/cli-ulh/** text=auto eol=lf
+tools/ulh/**    text=auto eol=lf
+docs/ulh/**     text=auto eol=lf
+.github/**      text=auto eol=lf
+*.sh            text eol=lf
+
+# uwh: PowerShell and cmd.exe expect CRLF on Windows.
+*.ps1  text eol=crlf
+*.psd1 text eol=crlf
+*.cmd  text eol=crlf
+apps/cli-uwh/**/*.yaml    text eol=crlf
+apps/cli-uwh/**/*.md      text eol=crlf
+apps/cli-uwh/**/*.example text eol=crlf
+docs/uwh/*.md             text eol=crlf
+
+LICENSE     text eol=lf
+**/VERSION  text eol=lf
 
 # bundled yq binaries - never touch these
 apps/cli-ulh/vendor/yq/* binary

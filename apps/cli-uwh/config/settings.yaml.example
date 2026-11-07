@@ -1,0 +1,9 @@
+# Einstellungen fuer uwh.
+#
+# Diese Vorlage legt uwh beim ersten Start als config\settings.yaml an - dort
+# aendern, nicht hier. Die Aktualisierung von uwh fasst sie nie an.
+#
+# language   Sprache: de, en, fr, it oder es. Leer = wie Windows.
+#            Im Menue wechselt L die Sprache und traegt sie hier ein.
+
+language:

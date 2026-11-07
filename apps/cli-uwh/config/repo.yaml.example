@@ -1,0 +1,65 @@
+# Eigene Repos fuer uwh - aufgebaut wie custom/repo.yaml bei ulh.
+#
+# Diese Vorlage legt uwh beim ersten Start als config\repo.yaml an - dort
+# aendern, nicht hier. config\ und data\ gehoeren dir, die Aktualisierung
+# von uwh fasst sie nie an. Jedes Repo ist ein Ordner unter data\ mit eigener
+# config.yaml (Aufbau wie der Katalog von uwh) und eigenem scripts\.
+#
+# Schalter wirken durch blosses Dasein - wie bei ulh:
+#   enabled:       im Menue zeigen; fehlt der Ordner und steht eine url da,
+#                  wird das Repo geholt
+#   auto_update:   beim Start per git aktualisieren
+#   Beide sind unabhaengig. 'enabled: false' schaltet ab.
+#
+# url leer = lokales Repo, den Ordner legst du selbst an.
+# Aus dem Netz geht es nur, wenn git installiert ist. Kein git: lokal geht immer.
+#
+# Zugangsdaten nie hier eintragen, sondern als Umgebungsvariable: ${NAME}.
+# SSH-Schluessel gehoeren nach data\keys\.
+
+repositories:
+
+  # Fuer eigene Programme ohne eigenes Repo: einfach in
+  # data\eigene\config.yaml eintragen. Den Namen zeigt das Menue als
+  # Kategorie - uebersetzt wie im Katalog mit nameDE, nameES usw.
+  eigene:
+    name: My programs
+    nameDE: Eigene Programme
+    nameES: Mis programas
+    nameIT: I miei programmi
+    nameFR: Mes programmes
+    url: ""
+    path: eigene
+    enabled:
+
+  # Beispiel: eigenes Repo per SSH
+  # firma:
+  #   name: Firma
+  #   url: git@github.com:meine-firma/uwh-firma.git
+  #   path: firma
+  #   auth_method: ssh
+  #   ssh_key: id_ed25519
+  #   enabled:
+  #   auto_update:
+
+  # Beispiel: privates Repo mit Token aus einer Umgebungsvariablen
+  # kunde:
+  #   name: Kunde
+  #   url: https://github.com/meine-firma/uwh-kunde.git
+  #   path: kunde
+  #   auth_method: https_token
+  #   token: ${UWH_TOKEN}
+  #   enabled:
+
+  # Beispiel: oeffentliches Repo
+  # gemeinschaft:
+  #   name: Gemeinschaft
+  #   url: https://github.com/beispiel/uwh-extras.git
+  #   path: gemeinschaft
+  #   enabled:
+  #   auto_update:
+
+update_settings:
+  auto_update_on_start:
+  retry_on_failure: 3
+  retry_delay_seconds: 5
