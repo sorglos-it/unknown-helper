@@ -10,20 +10,20 @@ The Windows counterpart of [ulh](https://github.com/sorglos-it/ulh).
 
 | Folder | Purpose | Language | Start | Build |
 |---|---|---|---|---|
-| `apps/cli` | pick and install software | PowerShell 5.1 | `apps\cli\uwh.cmd` | `tools\build.ps1` (tests + release zip) |
+| `apps/cli-uwh` | pick and install software | PowerShell 5.1 | `apps\cli-uwh\uwh.cmd` | `tools\uwh\build.ps1` (tests + release zip) |
 
 ## Start in 3 steps
 
 1. Open **PowerShell**: Start menu, type `PowerShell`, Enter.
 2. Paste this line, Enter:
    ```powershell
-   irm https://raw.githubusercontent.com/sorglos-it/uwh/main/tools/install.ps1 | iex
+   irm https://raw.githubusercontent.com/sorglos-it/unknown-helper/main/tools/uwh/install.ps1 | iex
    ```
 3. From then on, double-click **uwh** on the desktop.
 
 Already have a copy of the folder – for example `uwh-<version>.zip` from the
-[releases](https://github.com/sorglos-it/uwh/releases), unzipped? Then a
-double-click on **`apps\cli\uwh.cmd`** is enough.
+[releases](https://github.com/sorglos-it/unknown-helper/releases), unzipped? Then a
+double-click on **`apps\cli-uwh\uwh.cmd`** is enough.
 
 ## Usage
 
@@ -69,34 +69,34 @@ restart.
 ## Profiles
 
 After the selection, uwh asks whether to save it as a profile. To run a saved
-profile again, e.g. “Office”, in the folder `apps\cli`:
+profile again, e.g. “Office”, in the folder `apps\cli-uwh`:
 
 ```powershell
 .\uwh.cmd -Profile Office
 ```
 
-Profiles are stored in `apps\cli\data\profiles\`. Passwords are never saved.
+Profiles are stored in `apps\cli-uwh\data\profiles\`. Passwords are never saved.
 
 ## Your own programs
 
-Add them to `apps\cli\data\eigene\config.yaml` — the top of the file says how.
+Add them to `apps\cli-uwh\data\eigene\config.yaml` — the top of the file says how.
 Translations are optional: `description` counts for every language,
 `descriptionDE`, `descriptionFR` and so on override it.
-`apps\cli\data\` and `apps\cli\config\` are yours: an update of uwh never
+`apps\cli-uwh\data\` and `apps\cli-uwh\config\` are yours: an update of uwh never
 touches them.
 
 Several PCs or a team: your own repos via git, listed in
-`apps\cli\config\repo.yaml` — just like with ulh.
+`apps\cli-uwh\config\repo.yaml` — just like with ulh.
 
 ## If something goes wrong
 
-In the folder `apps\cli`:
+In the folder `apps\cli-uwh`:
 
 ```powershell
 .\uwh.cmd -Doctor
 ```
 
-Logs are in `apps\cli\data\logs\`.
+Logs are in `apps\cli-uwh\data\logs\`.
 
 Needs Windows 10 or 11 and winget (part of Windows 11; on Windows 10 it comes as
 “App Installer” from the Microsoft Store).

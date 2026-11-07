@@ -2,7 +2,7 @@
     uwh einrichten.
 
     Einzeiler in PowerShell:
-        irm https://raw.githubusercontent.com/sorglos-it/uwh/main/tools/install.ps1 | iex
+        irm https://raw.githubusercontent.com/sorglos-it/unknown-helper/main/tools/uwh/install.ps1 | iex
 
     Es wird kein git gebraucht. uwh landet unter:
         %LOCALAPPDATA%\Programs\uwh
@@ -217,7 +217,7 @@ function Get-Text {
 
 # Ohne Angabe von GitHub. Mit -Quelle geht auch ein Archiv aus dem eigenen
 # Netz - fuer Rollouts ohne Internetzugang.
-$Zip = 'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/main'
+$Zip = 'https://codeload.github.com/sorglos-it/unknown-helper/zip/refs/heads/main'
 if ($Quelle) {
     if (Test-Path -LiteralPath $Quelle) {
         $Zip = ([uri]((Resolve-Path -LiteralPath $Quelle).ProviderPath)).AbsoluteUri
@@ -279,9 +279,9 @@ try {
 
     if (-not (Test-Path $Ziel)) { New-Item -ItemType Directory -Path $Ziel -Force | Out-Null }
 
-    # Alles Eigene bleibt bei einer Neuinstallation erhalten: apps\cli\data und
+    # Alles Eigene bleibt bei einer Neuinstallation erhalten: apps\cli-uwh\data und
     # die eigenen Einstellungen. Im Archiv ist nichts davon, nur config\*.example.
-    $auslassen = @('apps\cli\data', 'apps\cli\config\repo.yaml', 'apps\cli\config\settings.yaml')
+    $auslassen = @('apps\cli-uwh\data', 'apps\cli-uwh\config\repo.yaml', 'apps\cli-uwh\config\settings.yaml')
 
     # Copy-Item -Recurse wuerde einen vorhandenen Zielordner verschachteln.
     function Kopiere-Baum {
@@ -309,8 +309,8 @@ try {
         $shell = New-Object -ComObject WScript.Shell
         $s = $shell.CreateShortcut($lnk)
         $s.TargetPath = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
-        $s.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $Ziel 'apps\cli\uwh.ps1')
-        $s.WorkingDirectory = (Join-Path $Ziel 'apps\cli')
+        $s.Arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}"' -f (Join-Path $Ziel 'apps\cli-uwh\uwh.ps1')
+        $s.WorkingDirectory = (Join-Path $Ziel 'apps\cli-uwh')
         $s.IconLocation = 'shell32.dll,165'
         $s.Description = Get-Text linkInfo
         $s.Save()
@@ -325,9 +325,9 @@ try {
         Write-Host "  $(Get-Text start)"
         Write-Host ''
         & (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') `
-            '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' (Join-Path $Ziel 'apps\cli\uwh.ps1')
+            '-NoProfile' '-ExecutionPolicy' 'Bypass' '-File' (Join-Path $Ziel 'apps\cli-uwh\uwh.ps1')
     } else {
-        Write-Host "  $(Get-Text startenMit (Join-Path $Ziel 'apps\cli\uwh.cmd'))"
+        Write-Host "  $(Get-Text startenMit (Join-Path $Ziel 'apps\cli-uwh\uwh.cmd'))"
         Write-Host ''
     }
 } catch {

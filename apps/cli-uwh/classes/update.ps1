@@ -2,8 +2,8 @@
 
 Set-StrictMode -Version 2.0
 
-$script:UwhRepoRaw = 'https://raw.githubusercontent.com/sorglos-it/uwh/main'
-$script:UwhRepoZip = 'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/main'
+$script:UwhRepoRaw = 'https://raw.githubusercontent.com/sorglos-it/unknown-helper/main'
+$script:UwhRepoZip = 'https://codeload.github.com/sorglos-it/unknown-helper/zip/refs/heads/main'
 
 function Get-UwhLocalVersion {
     $file = Get-UwhPath 'VERSION'
@@ -16,7 +16,7 @@ function Get-UwhLocalVersion {
 function Get-UwhRemoteVersion {
     Initialize-UwhTls
     try {
-        $r = Invoke-WebRequest -Uri "$script:UwhRepoRaw/apps/cli/VERSION" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
+        $r = Invoke-WebRequest -Uri "$script:UwhRepoRaw/apps/cli-uwh/VERSION" -UseBasicParsing -TimeoutSec 8 -ErrorAction Stop
         return ConvertTo-UwhVersionText $r.Content
     } catch {
         return $null
@@ -47,7 +47,7 @@ function Test-UwhNewer {
 }
 
 # Kopiert den Inhalt von Quelle nach Ziel und laesst das Eigene des Anwenders in
-# Ruhe: apps\cli\data (Profile, eigene Repos, Schluessel), config\repo.yaml und\r
+# Ruhe: apps\cli-uwh\data (Profile, eigene Repos, Schluessel), config\repo.yaml und\r
 # config\settings.yaml (die gewaehlte Sprache).
 # Beides ist nie im Archiv - der Schutz greift, falls es doch hineingeraet.
 # Skip nimmt Pfade relativ zur Quelle.
@@ -59,7 +59,7 @@ function Copy-UwhTree {
     param(
         [Parameter(Mandatory)][string]$Source,
         [Parameter(Mandatory)][string]$Target,
-        [string[]]$Skip = @('apps\cli\data', 'apps\cli\config\repo.yaml', 'apps\cli\config\settings.yaml'),
+        [string[]]$Skip = @('apps\cli-uwh\data', 'apps\cli-uwh\config\repo.yaml', 'apps\cli-uwh\config\settings.yaml'),
         [string]$Relativ = ''
     )
 

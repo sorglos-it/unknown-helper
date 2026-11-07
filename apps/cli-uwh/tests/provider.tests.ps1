@@ -5,7 +5,7 @@
 # dabei das System. Hier werden die Windows-Befehle durch Attrappen ersetzt:
 # geprueft wird die Entscheidung von uwh, nicht Windows selbst.
 #
-# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\provider.tests.ps1
+# Aufruf aus apps\cli-uwh:  powershell -ExecutionPolicy Bypass -File tests\provider.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'

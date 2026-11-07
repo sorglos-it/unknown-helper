@@ -4,7 +4,7 @@
 # git laeuft echt, aber gegen ein lokales Repo (file:///) - kein Netz noetig.
 # Ohne git werden nur die git-Pruefungen uebersprungen.
 #
-# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\eigene.tests.ps1
+# Aufruf aus apps\cli-uwh:  powershell -ExecutionPolicy Bypass -File tests\eigene.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'

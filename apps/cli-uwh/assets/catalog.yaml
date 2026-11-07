@@ -38,7 +38,7 @@
 # Aktualisierung von uwh ersetzt. Eigenes gehoert nach
 # data\eigene\config.yaml - oder in ein eigenes Repo, siehe config\repo.yaml.
 #
-# Wer an dieser Datei hier arbeitet, prueft danach (aus apps\cli\):
+# Wer an dieser Datei hier arbeitet, prueft danach (aus apps\cli-uwh\):
 #   .\uwh.cmd -Doctor                                      Aufbau
 #   powershell -ExecutionPolicy Bypass -File tests\sprache.tests.ps1  alles uebersetzt, passt es?
 #   powershell -ExecutionPolicy Bypass -File tests\online.tests.ps1   gibt es das Paket?

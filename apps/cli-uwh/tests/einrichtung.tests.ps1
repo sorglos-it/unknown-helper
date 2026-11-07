@@ -5,7 +5,7 @@
 # ausgeliefert. Es wird nichts heruntergeladen, nichts installiert und keine
 # Verknuepfung angelegt.
 #
-# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\einrichtung.tests.ps1
+# Aufruf aus apps\cli-uwh:  powershell -ExecutionPolicy Bypass -File tests\einrichtung.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -53,12 +53,12 @@ function Baue-Archiv {
     New-Item -ItemType Directory -Path $inhalt -Force | Out-Null
 
     # Nur, was auch im echten Archiv steckt: keine config\repo.yaml, kein data\.
-    $dateien = @('README.md', 'CHANGELOG.md', 'LICENSE', 'tools\install.ps1',
-                 'apps\cli\uwh.ps1', 'apps\cli\uwh.cmd', 'apps\cli\config\repo.yaml.example',
-                 'apps\cli\config\settings.yaml.example')
+    $dateien = @('README.md', 'CHANGELOG.md', 'LICENSE', 'tools\uwh\install.ps1',
+                 'apps\cli-uwh\uwh.ps1', 'apps\cli-uwh\uwh.cmd', 'apps\cli-uwh\config\repo.yaml.example',
+                 'apps\cli-uwh\config\settings.yaml.example')
     foreach ($ordner in @('classes', 'assets', 'templates', 'lang')) {
         foreach ($d in Get-ChildItem -LiteralPath (Join-Path $root $ordner) -File) {
-            $dateien += ('apps\cli\{0}\{1}' -f $ordner, $d.Name)
+            $dateien += ('apps\cli-uwh\{0}\{1}' -f $ordner, $d.Name)
         }
     }
     foreach ($n in $dateien) {
@@ -66,7 +66,7 @@ function Baue-Archiv {
         New-Item -ItemType Directory -Path (Split-Path -Parent $z) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $stamm $n) -Destination $z
     }
-    Set-Content -Path (Join-Path $inhalt 'apps\cli\VERSION') -Value $Version -Encoding UTF8 -NoNewline
+    Set-Content -Path (Join-Path $inhalt 'apps\cli-uwh\VERSION') -Value $Version -Encoding UTF8 -NoNewline
 
     $datei = Join-Path $sandkasten ('uwh-' + $Version + '.zip')
     Compress-Archive -Path $inhalt -DestinationPath $datei -Force
@@ -79,25 +79,25 @@ Write-Host 'Einrichtung' -ForegroundColor Cyan
 
 $archiv = Baue-Archiv '0.1.0'
 $ziel   = Join-Path $sandkasten 'installiert'
-$cli    = Join-Path $ziel 'apps\cli'
+$cli    = Join-Path $ziel 'apps\cli-uwh'
 
-& (Join-Path $stamm 'tools\install.ps1') -Quelle $archiv.Zip -Ziel $ziel -KeinStart -KeineVerknuepfung | Out-Null
+& (Join-Path $stamm 'tools\uwh\install.ps1') -Quelle $archiv.Zip -Ziel $ziel -KeinStart -KeineVerknuepfung | Out-Null
 
 Test-Case 'Alle Dateien kommen an' {
-    foreach ($n in @('README.md', 'CHANGELOG.md', 'tools\install.ps1',
-                     'apps\cli\uwh.ps1', 'apps\cli\uwh.cmd', 'apps\cli\VERSION',
-                     'apps\cli\assets\catalog.yaml', 'apps\cli\classes\core.ps1',
-                     'apps\cli\classes\menu.ps1', 'apps\cli\classes\update.ps1',
-                     'apps\cli\templates\script-template.ps1', 'apps\cli\config\repo.yaml.example',
-                     'apps\cli\config\settings.yaml.example', 'apps\cli\classes\lang.ps1',
-                     'apps\cli\lang\de.yaml', 'apps\cli\lang\en.yaml', 'apps\cli\lang\fr.yaml',
-                     'apps\cli\lang\it.yaml', 'apps\cli\lang\es.yaml')) {
+    foreach ($n in @('README.md', 'CHANGELOG.md', 'tools\uwh\install.ps1',
+                     'apps\cli-uwh\uwh.ps1', 'apps\cli-uwh\uwh.cmd', 'apps\cli-uwh\VERSION',
+                     'apps\cli-uwh\assets\catalog.yaml', 'apps\cli-uwh\classes\core.ps1',
+                     'apps\cli-uwh\classes\menu.ps1', 'apps\cli-uwh\classes\update.ps1',
+                     'apps\cli-uwh\templates\script-template.ps1', 'apps\cli-uwh\config\repo.yaml.example',
+                     'apps\cli-uwh\config\settings.yaml.example', 'apps\cli-uwh\classes\lang.ps1',
+                     'apps\cli-uwh\lang\de.yaml', 'apps\cli-uwh\lang\en.yaml', 'apps\cli-uwh\lang\fr.yaml',
+                     'apps\cli-uwh\lang\it.yaml', 'apps\cli-uwh\lang\es.yaml')) {
         Assert-True (Test-Path (Join-Path $ziel $n)) "Datei '$n'"
     }
 }
 
 Test-Case 'Keine verschachtelten Ordner' {
-    foreach ($n in @('uwh-main', 'apps\apps', 'apps\cli\classes\classes')) {
+    foreach ($n in @('uwh-main', 'apps\apps', 'apps\cli-uwh\classes\classes')) {
         Assert-True (-not (Test-Path (Join-Path $ziel $n))) "'$n' darf es nicht geben"
     }
 }
@@ -128,7 +128,7 @@ Test-Case 'install.ps1 ist reines ASCII ohne BOM - sonst scheitert irm | iex' {
     # GitHub liefert die Datei als UTF-8, irm behaelt ein BOM am Anfang, und
     # iex bricht daran ab. Ohne BOM liest Windows PowerShell 5.1 aber ANSI -
     # also darf kein einziges Zeichen ausserhalb von ASCII vorkommen.
-    $bytes = [IO.File]::ReadAllBytes((Join-Path $stamm 'tools\install.ps1'))
+    $bytes = [IO.File]::ReadAllBytes((Join-Path $stamm 'tools\uwh\install.ps1'))
     Assert-True (-not ($bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB)) 'kein BOM'
     $fremd = @($bytes | Where-Object { $_ -gt 127 }).Count
     Assert-Equal 0 $fremd 'Zeichen ausserhalb von ASCII'
@@ -137,8 +137,8 @@ Test-Case 'install.ps1 ist reines ASCII ohne BOM - sonst scheitert irm | iex' {
 Test-Case 'Ueber irm | iex schliesst ein Fehler das Fenster nicht' {
     # Wie der Einzeiler: der Text laeuft in der Sitzung des Anwenders. Ein Host,
     # den es nicht gibt, laesst die Einrichtung sicher scheitern.
-    $text = (Get-Content -LiteralPath (Join-Path $stamm 'tools\install.ps1') -Raw).Replace(
-        'https://codeload.github.com/sorglos-it/uwh/zip/refs/heads/main', 'https://gibtesnicht.invalid/uwh.zip')
+    $text = (Get-Content -LiteralPath (Join-Path $stamm 'tools\uwh\install.ps1') -Raw).Replace(
+        'https://codeload.github.com/sorglos-it/unknown-helper/zip/refs/heads/main', 'https://gibtesnicht.invalid/uwh.zip')
     $kopie = Join-Path $sandkasten 'install-iex.ps1'
     [IO.File]::WriteAllText($kopie, $text)
     $aus = [string](& $exe -NoProfile -Command "Invoke-Expression ([IO.File]::ReadAllText('$kopie')); 'SITZUNG LEBT ' + `$ErrorActionPreference" 2>&1)
@@ -147,7 +147,7 @@ Test-Case 'Ueber irm | iex schliesst ein Fehler das Fenster nicht' {
 
 Test-Case 'Ohne -KeineVerknuepfung entstuende eine Verknuepfung' {
     # Nur der Schalter wird geprueft - angelegt wird hier absichtlich keine.
-    $text = Get-Content (Join-Path $stamm 'tools\install.ps1') -Raw
+    $text = Get-Content (Join-Path $stamm 'tools\uwh\install.ps1') -Raw
     Assert-True ($text -match 'if \(-not \$KeineVerknuepfung\)') 'Schalter wird beachtet'
 }
 
@@ -184,12 +184,12 @@ Add-Content -Path (Join-Path $cli 'config\repo.yaml') -Encoding UTF8 -Value '# m
 [void](Save-UwhLanguage 'it')
 
 $neu = Baue-Archiv '0.2.0'
-Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\classes\neu.ps1') -Value '# neu dazugekommen' -Encoding UTF8
+Set-Content -Path (Join-Path $neu.Ordner 'apps\cli-uwh\classes\neu.ps1') -Value '# neu dazugekommen' -Encoding UTF8
 # Selbst wenn ein Archiv versehentlich Eigenes mitbringt, darf es nichts ersetzen.
-New-Item -ItemType Directory -Path (Join-Path $neu.Ordner 'apps\cli\data\eigene') -Force | Out-Null
-Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\data\eigene\config.yaml') -Value '# leer' -Encoding UTF8
-Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\config\repo.yaml') -Value '# aus dem Archiv' -Encoding UTF8
-Set-Content -Path (Join-Path $neu.Ordner 'apps\cli\config\settings.yaml') -Value 'language: es' -Encoding UTF8
+New-Item -ItemType Directory -Path (Join-Path $neu.Ordner 'apps\cli-uwh\data\eigene') -Force | Out-Null
+Set-Content -Path (Join-Path $neu.Ordner 'apps\cli-uwh\data\eigene\config.yaml') -Value '# leer' -Encoding UTF8
+Set-Content -Path (Join-Path $neu.Ordner 'apps\cli-uwh\config\repo.yaml') -Value '# aus dem Archiv' -Encoding UTF8
+Set-Content -Path (Join-Path $neu.Ordner 'apps\cli-uwh\config\settings.yaml') -Value 'language: es' -Encoding UTF8
 Compress-Archive -Path $neu.Ordner -DestinationPath $neu.Zip -Force
 
 $script:UwhRepoRaw = ([uri]$neu.Ordner).AbsoluteUri

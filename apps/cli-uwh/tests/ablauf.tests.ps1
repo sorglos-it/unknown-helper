@@ -1,7 +1,7 @@
 ﻿# Prueft die ganze Kette: Katalog, Profil, Plan, Ablauf, Menuezeilen.
 # Es wird nichts installiert - der Provider wird durch eine Attrappe ersetzt.
 #
-# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
+# Aufruf aus apps\cli-uwh:  powershell -ExecutionPolicy Bypass -File tests\ablauf.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -435,7 +435,7 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     $ziel   = Join-Path $sandkasten 'alt'
 
     # So sieht ein frisch entpacktes Archiv aus.
-    $neuCli = Join-Path $quelle 'apps\cli'
+    $neuCli = Join-Path $quelle 'apps\cli-uwh'
     foreach ($o in @('classes', 'assets', 'config', 'data\profiles')) {
         New-Item -ItemType Directory -Path (Join-Path $neuCli $o) -Force | Out-Null
     }
@@ -448,7 +448,7 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
     Set-Content (Join-Path $neuCli 'data\profiles\x.yaml') 'aus-archiv' -Encoding UTF8
 
     # So sieht die vorhandene Installation aus.
-    $altCli = Join-Path $ziel 'apps\cli'
+    $altCli = Join-Path $ziel 'apps\cli-uwh'
     foreach ($o in @('classes', 'config', 'data\profiles')) {
         New-Item -ItemType Directory -Path (Join-Path $altCli $o) -Force | Out-Null
     }
@@ -474,7 +474,7 @@ Test-Case 'Aktualisierung kopiert richtig ueber eine vorhandene Installation' {
 }
 
 Test-Case 'Ohne Projektbaum drumherum aktualisiert sich uwh nicht' {
-    # Wer nur apps\cli irgendwohin kopiert hat, bekaeme sonst den ganzen
+    # Wer nur apps\cli-uwh irgendwohin kopiert hat, bekaeme sonst den ganzen
     # Projektbaum in einen fremden Ordner gekippt.
     Assert-Equal (Split-Path -Parent (Split-Path -Parent $root)) (Get-UwhProjectRoot) 'Stamm der Arbeitskopie'
     $lose = Join-Path $sandkasten 'woanders\uwh'
@@ -926,7 +926,7 @@ Test-Case 'Alte Protokolle und liegengebliebene Zwischenstaende werden aufgeraeu
 
 Test-Case 'Eine git-Arbeitskopie ueberschreibt sich nicht selbst' {
     # Das Archiv ueber eine Arbeitskopie zu kopieren, loeschte ungesicherte Aenderungen.
-    $cli = Join-Path $sandkasten 'arbeitskopie\apps\cli'
+    $cli = Join-Path $sandkasten 'arbeitskopie\apps\cli-uwh'
     New-Item -ItemType Directory -Path $cli -Force | Out-Null
     New-Item -ItemType Directory -Path (Join-Path $sandkasten 'arbeitskopie\.git') -Force | Out-Null
     function Get-UwhRoot { $cli }

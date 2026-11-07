@@ -2,7 +2,7 @@
 # Es wird nichts installiert und nichts neu gestartet - der Neustart wird
 # durch eine Attrappe ersetzt, alles davor und danach laeuft echt.
 #
-# Aufruf aus apps\cli:  powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
+# Aufruf aus apps\cli-uwh:  powershell -ExecutionPolicy Bypass -File tests\fortsetzen.tests.ps1
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'

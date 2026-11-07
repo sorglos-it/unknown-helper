@@ -1,7 +1,7 @@
 ﻿<#
     uwh bauen: erst alle Pruefungen ohne Internet, dann das Archiv fuer ein Release.
 
-        powershell -ExecutionPolicy Bypass -File tools\build.ps1
+        powershell -ExecutionPolicy Bypass -File tools\uwh\build.ps1
 
     Ergebnis: dist\uwh-<version>.zip - der Stand des letzten Commits, maximal
     komprimiert, oben ein Ordner uwh-<version>\ wie im Archiv von GitHub. Damit
@@ -9,15 +9,15 @@
         .\tools\install.ps1 -Quelle dist\uwh-<version>.zip
 
     Die Pruefung der Paketkennungen braucht Internet und laeuft extra:
-        powershell -ExecutionPolicy Bypass -File apps\cli\tests\online.tests.ps1
+        powershell -ExecutionPolicy Bypass -File apps\cli-uwh\tests\online.tests.ps1
 #>
 [CmdletBinding()]
 param()
 
 $ErrorActionPreference = 'Stop'
 
-$stamm = Split-Path -Parent $PSScriptRoot
-$cli = Join-Path $stamm 'apps\cli'
+$stamm = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
+$cli = Join-Path $stamm 'apps\cli-uwh'
 $version = (Get-Content -LiteralPath (Join-Path $cli 'VERSION') -Raw).Trim()
 $ps51 = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 
@@ -79,7 +79,7 @@ try {
     Remove-Item -LiteralPath $tar
 
     $ordner = Join-Path $tmp "uwh-$version"
-    $drin = (Get-Content -LiteralPath (Join-Path $ordner 'apps\cli\VERSION') -Raw).Trim()
+    $drin = (Get-Content -LiteralPath (Join-Path $ordner 'apps\cli-uwh\VERSION') -Raw).Trim()
     if ($drin -ne $version) { throw "VERSION $version ist noch nicht committet (im Commit steht $drin)." }
 
     if (Test-Path -LiteralPath $ziel) { Remove-Item -LiteralPath $ziel }
