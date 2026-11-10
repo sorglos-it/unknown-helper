@@ -82,17 +82,22 @@ NGC_RELEASE_BASE="${NGC_RELEASE_BASE:-https://github.com/sorglos-it/nextgencloud
 
 # The public key of NGC's releases (sign.PurposeRelease), fixed in the script.
 # It is the whole trust in a release, and it goes into api.json as releaseKey so
-# that the API judges an update by the same key. The placeholder below is not a
-# key, so every install stops at the check - which is the safe way round until
-# the real key is in here.
+# that the API judges an update by the same key.
+# The key below is REAL and is the one the published releases are signed with
+# (it reads back as pN6Z6a9NR0aG6aEJIJ5EHg). The *REPLACE-THIS-LINE* check
+# further down therefore never fires - it guards against a script that was
+# shipped without a key, which this one is not. Anybody who wants his own chain
+# of trust has to replace these three lines by hand; there is no answer and no
+# environment variable for it.
 NGC_RELEASE_KEY="-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAG0sJt5p/tSyJB9yXaDT5Y5VWchsBAMDErZPY1h9sDAo=
 -----END PUBLIC KEY-----"
 
 # The official store of NGC, taken when the admin names none (shared/ulh.md: a
-# normal installation needs neither of the two answers). Its key is a
-# placeholder in the same way the release key is, so until it is real an
-# installation names its own store with store_url and store_key.
+# normal installation needs neither of the two answers). Unlike the release key
+# above, this one IS still a placeholder: NGC has no store of its own, so every
+# installation names its own with store_url and store_key. The check further
+# down does fire on it.
 NGC_STORE_URL_DEFAULT="https://store.nextgencloud.org"
 NGC_STORE_KEY_DEFAULT="REPLACE-THIS-LINE-WITH-THE-NGC-STORE-KEY"
 

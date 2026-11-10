@@ -83,9 +83,13 @@ NGC_RELEASE_BASE="${NGC_RELEASE_BASE:-https://github.com/sorglos-it/nextgencloud
 
 # The public key of NGC's releases (sign.PurposeRelease), fixed in the script.
 # It is the whole trust in a release, and it goes into controller.json as
-# releaseKey so that the controller judges an update by the same key. The
-# placeholder below is not a key, so every install stops at the check - which
-# is the safe way round until the real key is in here.
+# releaseKey so that the controller judges an update by the same key.
+# The key below is REAL and is the one the published releases are signed with
+# (it reads back as pN6Z6a9NR0aG6aEJIJ5EHg). The *REPLACE-THIS-LINE* check
+# further down therefore never fires - it guards against a script that was
+# shipped without a key, which this one is not. Anybody who wants his own chain
+# of trust has to replace these three lines by hand; there is no answer and no
+# environment variable for it.
 NGC_RELEASE_KEY="-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAG0sJt5p/tSyJB9yXaDT5Y5VWchsBAMDErZPY1h9sDAo=
 -----END PUBLIC KEY-----"
